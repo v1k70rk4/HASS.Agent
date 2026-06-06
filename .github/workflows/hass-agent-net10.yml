@@ -1,0 +1,58 @@
+name: HASS.Agent .NET10
+
+on:
+  push:
+    paths:
+      - "src/HASS.Agent.NET10/**"
+      - "NuGet.config"
+      - ".github/workflows/hass-agent-net10.yml"
+      - "README.md"
+  pull_request:
+    paths:
+      - "src/HASS.Agent.NET10/**"
+      - "NuGet.config"
+      - ".github/workflows/hass-agent-net10.yml"
+      - "README.md"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: windows-latest
+
+    env:
+      PROJECT: src/HASS.Agent.NET10/HASS.Agent.NET10.csproj
+      CONFIGURATION: Release
+      RUNTIME: win-x64
+      PUBLISH_DIR: artifacts/HASS.Agent.NET10/win-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore $env:PROJECT
+
+      - name: Build
+        run: dotnet build $env:PROJECT -c $env:CONFIGURATION --no-restore
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish $env:PROJECT
+          -c $env:CONFIGURATION
+          -r $env:RUNTIME
+          --self-contained true
+          -p:PublishSingleFile=true
+          -o $env:PUBLISH_DIR
+
+      - name: Upload published app
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HASS.Agent.NET10-win-x64
+          path: artifacts/HASS.Agent.NET10/win-x64
