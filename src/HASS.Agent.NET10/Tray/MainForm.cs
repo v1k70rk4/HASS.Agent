@@ -75,13 +75,14 @@ internal sealed class MainForm : Form
         Text = AppIdentity.DisplayName;
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9.5F);
+        AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(1040, 720);
-        MinimumSize = new Size(900, 620);
+        ClientSize = new Size(900, 600);
+        MinimumSize = new Size(700, 480);
         BackColor = PageBg;
         Icon = LoadIcon();
 
-        var sidebar = new Panel { Dock = DockStyle.Left, Width = 240, BackColor = SidebarBg };
+        var sidebar = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = SidebarBg };
         BuildSidebar(sidebar);
 
         var bottomBar = BuildBottomBar();
@@ -101,6 +102,23 @@ internal sealed class MainForm : Form
 
         LoadSettings();
         SelectPage(0);
+    }
+
+    private int Dpi(int value) => (int)(value * DeviceDpi / 96f);
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        var screen = Screen.FromControl(this).WorkingArea;
+        if (Width > screen.Width || Height > screen.Height)
+        {
+            var w = Math.Min(Width, screen.Width);
+            var h = Math.Min(Height, screen.Height);
+            SetBounds(
+                screen.X + (screen.Width - w) / 2,
+                screen.Y + (screen.Height - h) / 2,
+                w, h);
+        }
     }
 
     private static string S(string key) => Strings.Get(key);
@@ -140,12 +158,12 @@ internal sealed class MainForm : Form
 
     private Panel CreateNavItem(string text, int index)
     {
-        var item = new Panel { Location = new Point(0, 8 + index * 44), Size = new Size(240, 44), BackColor = SidebarBg, Cursor = Cursors.Hand };
+        var item = new Panel { Location = new Point(0, 8 + index * 44), Size = new Size(200, 44), BackColor = SidebarBg, Cursor = Cursors.Hand };
         var indicator = new Panel { Location = Point.Empty, Size = new Size(3, 44), BackColor = Color.Transparent };
         var label = new Label
         {
             Text = text, ForeColor = SidebarText, Font = new Font("Segoe UI", 10.5F),
-            AutoSize = false, Location = new Point(22, 0), Size = new Size(214, 44),
+            AutoSize = false, Location = new Point(22, 0), Size = new Size(174, 44),
             TextAlign = ContentAlignment.MiddleLeft, BackColor = Color.Transparent
         };
 
@@ -199,8 +217,8 @@ internal sealed class MainForm : Form
 
         bar.Layout += (_, _) =>
         {
-            close.Location = new Point(bar.ClientSize.Width - close.Width - 20, 10);
-            save.Location = new Point(close.Left - save.Width - 10, 10);
+            close.Location = new Point(bar.ClientSize.Width - close.Width - Dpi(20), Dpi(10));
+            save.Location = new Point(close.Left - save.Width - Dpi(10), Dpi(10));
         };
         close.Click += (_, _) => Close();
 
@@ -704,7 +722,10 @@ internal sealed class MainForm : Form
         var page = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, AutoScroll = true, Visible = false };
         page.Layout += (_, _) =>
         {
-            var w = Math.Min(page.ClientSize.Width - 56, 860);
+            var padding = Dpi(56);
+            var maxWidth = Dpi(860);
+            var w = Math.Min(page.ClientSize.Width - padding, maxWidth);
+            if (w < Dpi(400)) w = page.ClientSize.Width - padding;
             foreach (Control c in page.Controls)
             {
                 if (c is Label) continue;
