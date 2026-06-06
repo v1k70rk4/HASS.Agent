@@ -44,9 +44,95 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--install-service --quiet"; Tasks: installservice; Flags: runhidden waituntilterminated
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Check: ShouldOfferLaunch
 
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--stop-service --quiet"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--uninstall-service --quiet"; Flags: runhidden waituntilterminated skipifdoesntexist
+
+[Code]
+var
+  ExistingServiceInstalled: Boolean;
+  TrayWasRunning: Boolean;
+
+function RunHidden(FileName: string; Parameters: string): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(FileName, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function IsServiceInstalled(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\sc.exe'), 'query "HASS.Agent.NET10.Service"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := ResultCode = 0;
+end;
+
+function IsTrayRunning(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec(
+    ExpandConstant('{sys}\cmd.exe'),
+    '/C tasklist /FI "IMAGENAME eq {#MyAppExeName}" /NH | find /I "{#MyAppExeName}" >NUL',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+  Result := ResultCode = 0;
+end;
+
+function ShouldOfferLaunch(): Boolean;
+begin
+  Result := not TrayWasRunning;
+end;
+
+procedure StopInstalledService();
+begin
+  RunHidden(ExpandConstant('{sys}\sc.exe'), 'stop "HASS.Agent.NET10.Service"');
+end;
+
+procedure StopRunningTrayApp();
+begin
+  if FileExists(ExpandConstant('{app}\{#MyAppExeName}')) then
+  begin
+    RunHidden(ExpandConstant('{app}\{#MyAppExeName}'), '--exit --quiet');
+    Sleep(2000);
+    if IsTrayRunning() then
+    begin
+      RunHidden(ExpandConstant('{sys}\taskkill.exe'), '/IM "{#MyAppExeName}" /T /F');
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssInstall then
+  begin
+    ExistingServiceInstalled := IsServiceInstalled();
+    TrayWasRunning := IsTrayRunning();
+    StopRunningTrayApp();
+    if ExistingServiceInstalled then
+    begin
+      StopInstalledService();
+      Sleep(1500);
+    end;
+  end;
+
+  if CurStep = ssPostInstall then
+  begin
+    if ExistingServiceInstalled or WizardIsTaskSelected('installservice') then
+    begin
+      RunHidden(ExpandConstant('{app}\{#MyAppExeName}'), '--install-service --quiet');
+    end;
+
+    if TrayWasRunning then
+    begin
+      Exec(ExpandConstant('{app}\{#MyAppExeName}'), '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+    end;
+  end;
+end;

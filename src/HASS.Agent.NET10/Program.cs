@@ -19,11 +19,18 @@ namespace HASS.Agent.Companion;
 internal static class Program
 {
     private const string MutexName = "Local\\HASS.Agent.NET10";
+    private const string ExitEventName = "Local\\HASS.Agent.NET10.Exit";
 
     [STAThread]
     private static void Main()
     {
         var args = Environment.GetCommandLineArgs().Skip(1).ToArray();
+        if (args.Any(arg => string.Equals(arg, "--exit", StringComparison.OrdinalIgnoreCase)))
+        {
+            SignalExistingInstanceToExit();
+            return;
+        }
+
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
         {
             if (args.Any(arg => string.Equals(arg, "--service", StringComparison.OrdinalIgnoreCase)))
@@ -66,6 +73,14 @@ internal static class Program
                 MessageBoxIcon.Information);
             return;
         }
+
+        using var exitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName);
+        var exitRegistration = ThreadPool.RegisterWaitForSingleObject(
+            exitEvent,
+            (_, _) => Application.Exit(),
+            state: null,
+            Timeout.InfiniteTimeSpan,
+            executeOnlyOnce: false);
 
         var paths = AppPaths.Create();
         using var log = new FileLog(paths.LogFile);
@@ -147,10 +162,29 @@ internal static class Program
         }
 
         Application.Run(trayContext);
+        exitRegistration.Unregister(null);
 
         mqttService.StopAsync().GetAwaiter().GetResult();
         localApi.StopAsync().GetAwaiter().GetResult();
         log.Info($"Stopped {AppIdentity.DisplayName}.");
+    }
+
+    private static void SignalExistingInstanceToExit()
+    {
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(ExitEventName, out var exitEvent))
+            {
+                using (exitEvent)
+                {
+                    exitEvent.Set();
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort helper for installers and scripts.
+        }
     }
 
     private static void LoadLanguageEarly()

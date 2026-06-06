@@ -198,6 +198,10 @@ dotnet publish .\src\HASS.Agent.NET10\HASS.Agent.NET10.csproj -c Release -r win-
 
 The output executable is named `HASS.Agent.NET10.exe`.
 
+## Installer
+
+The setup package is built with Inno Setup. During upgrades it stops the running tray app, stops the system service if it is installed, replaces the files, reinstalls/starts the service, and starts the tray app again if it was running before the upgrade.
+
 ## GitHub Actions
 
 This repository includes a Windows GitHub Actions workflow for the .NET 10 client:
@@ -209,6 +213,9 @@ This repository includes a Windows GitHub Actions workflow for the .NET 10 clien
 - downloadable artifacts from manual workflow runs:
   - `HASS.Agent.NET10-win-x64`
   - `HASS.Agent.NET10-Setup`
+- release assets on `v*` tags or published GitHub Releases:
+  - `HASS.Agent.NET10-Setup-<version>.exe`
+  - `HASS.Agent.NET10-win-x64-<version>.zip`
 
 The technical developer notes live here:
 

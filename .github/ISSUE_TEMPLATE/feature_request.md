@@ -1,19 +1,17 @@
 ---
 name: Feature request
-about: Suggest an idea or feature for HASS.Agent
+about: Suggest an idea or feature for HASS.Agent .NET10
 title: 'Feature: '
 labels: ''
 assignees: ''
 
 ---
 
-Please make sure your feature isn't already listed on HASS.Agent's issue tracker:
+Please make sure your feature is not already listed in this repository's GitHub Issues:
 
-https://lab02research.youtrack.cloud/
+https://github.com/v1k70rk4/HASS.Agent/issues
 
-There's a list of open bugs & features on the right. On the left you can see what's being worked on, what's planned and what's ready for the next release.
-
-If you're not sure, don't worry, just go ahead and we'll discuss :)
+If you are not sure, do not worry, just go ahead and we will discuss it.
 
 ----
 
