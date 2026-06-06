@@ -33,6 +33,7 @@ internal sealed class MqttCompanionService : IDisposable
     private IMqttClient? _client;
     private CancellationTokenSource? _cts;
     private Task? _worker;
+    private readonly SemaphoreSlim _restartLock = new(1, 1);
 
     public MqttCompanionService(
         CompanionSettings settings,
@@ -71,9 +72,22 @@ internal sealed class MqttCompanionService : IDisposable
 
     public async Task RestartAsync()
     {
-        _log.Info("Restarting MQTT service.");
-        await StopAsync(publishOffline: false);
-        Start();
+        await _restartLock.WaitAsync();
+        try
+        {
+            _log.Info("Refreshing MQTT discovery and restarting MQTT runtime.");
+            if (_client is { IsConnected: true })
+            {
+                await PublishDiscoveryAsync(offline: !_settings.MqttEnabled);
+            }
+
+            await StopAsync(publishOffline: false);
+            Start();
+        }
+        finally
+        {
+            _restartLock.Release();
+        }
     }
 
     public async Task PublishNotificationActionAsync(string action)
@@ -375,16 +389,19 @@ internal sealed class MqttCompanionService : IDisposable
             return;
         }
 
+        var systemSensorsEnabled = !offline && _settings.MqttSystemSensorsEnabled;
+        var buttonsEnabled = !offline && _settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0;
+
         var apis = offline
             ? new ApiCapabilitiesResponse(false, false, false, false, [], [], [])
             : new ApiCapabilitiesResponse(
                 _settings.MqttNotificationsEnabled,
                 _settings.MqttMediaPlayerEnabled,
-                _settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0,
-                _settings.MqttSystemSensorsEnabled,
-                _settings.TrayAppCommands,
-                BuildCustomSensorDescriptors(serviceRole: false),
-                BuildStandardSensorDescriptors(serviceRole: false));
+                buttonsEnabled,
+                systemSensorsEnabled,
+                buttonsEnabled ? BuildCommandDescriptors(_settings.TrayAppCommands) : [],
+                systemSensorsEnabled ? BuildCustomSensorDescriptors(serviceRole: false) : [],
+                systemSensorsEnabled ? BuildStandardSensorDescriptors(serviceRole: false) : []);
 
         await PublishJsonAsync(
             $"hass.agent/devices/{_settings.DeviceName}",
@@ -421,14 +438,28 @@ internal sealed class MqttCompanionService : IDisposable
 
     private MqttServiceStatusMessage BuildServiceStatus(bool online)
     {
+        var systemSensorsEnabled = online && _settings.MqttServiceSystemSensorsEnabled;
+
         return new MqttServiceStatusMessage(
             online,
             _role.Token(),
-            _settings.ServiceCommands,
-            _settings.MqttServiceSystemSensorsEnabled,
-            BuildCustomSensorDescriptors(serviceRole: true),
-            BuildStandardSensorDescriptors(serviceRole: true),
+            online ? BuildCommandDescriptors(_settings.ServiceCommands) : [],
+            systemSensorsEnabled,
+            systemSensorsEnabled ? BuildCustomSensorDescriptors(serviceRole: true) : [],
+            systemSensorsEnabled ? BuildStandardSensorDescriptors(serviceRole: true) : [],
             DateTimeOffset.UtcNow);
+    }
+
+    private static IReadOnlyList<SystemCommandDescriptor> BuildCommandDescriptors(IEnumerable<string> commands)
+    {
+        return commands
+            .Select(command => SystemCommandCatalog.TryNormalizeName(command, out var normalized) ? normalized : string.Empty)
+            .Where(command => !string.IsNullOrEmpty(command))
+            .Select(command => new SystemCommandDescriptor(
+                command,
+                Localization.Strings.GetHa($"Cmd.{command}"),
+                command is "shutdown" or "restart" ? Localization.Strings.GetHa($"Cmd.{command}_comment") : null))
+            .ToList();
     }
 
     private IReadOnlyList<BuiltInSensorDescriptor> BuildStandardSensorDescriptors(bool serviceRole)
@@ -437,7 +468,7 @@ internal sealed class MqttCompanionService : IDisposable
             .Where(sensor => serviceRole ? sensor.Service : sensor.TrayApp)
             .Select(sensor => BuiltInSensorCatalog.Find(sensor.Key))
             .Where(sensor => sensor is not null)
-            .Select(sensor => new BuiltInSensorDescriptor(sensor!.Key, sensor.Name))
+            .Select(sensor => new BuiltInSensorDescriptor(sensor!.Key, Localization.Strings.GetHa($"Sensor.{sensor.Key}")))
             .ToList();
     }
 
@@ -518,7 +549,7 @@ internal sealed record NotificationActionMessage(
 internal sealed record MqttServiceStatusMessage(
     [property: JsonPropertyName("online")] bool Online,
     [property: JsonPropertyName("role")] string Role,
-    [property: JsonPropertyName("commands")] IReadOnlyList<string> Commands,
+    [property: JsonPropertyName("commands")] IReadOnlyList<SystemCommandDescriptor> Commands,
     [property: JsonPropertyName("system_sensors")] bool SystemSensors,
     [property: JsonPropertyName("custom_sensors")] IReadOnlyList<CustomSensorDescriptor> CustomSensors,
     [property: JsonPropertyName("standard_sensors")] IReadOnlyList<BuiltInSensorDescriptor> StandardSensors,

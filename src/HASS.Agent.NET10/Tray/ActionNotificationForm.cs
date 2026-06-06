@@ -127,7 +127,7 @@ internal sealed class ActionNotificationForm : Form
     {
         var dismiss = new Button
         {
-            Text = "Bezárás",
+            Text = Localization.Strings.Get("Btn.Close"),
             Size = new Size(92, 32),
             Location = new Point(18, ClientSize.Height - 46)
         };

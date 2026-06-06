@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using HASS.Agent.Companion.Configuration;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Runtime;
 
 namespace HASS.Agent.Companion.Tray;
@@ -45,10 +46,10 @@ internal sealed class MqttSettingsForm : Form
     private void BuildForm()
     {
         var y = 18;
-        AddControl(_enabled, "MQTT engedelyezese", 18, y, 380);
+        AddControl(_enabled, Strings.Get("Mqtt.Enable"), 18, y, 380);
         y += 40;
 
-        AddLabel("Broker host", 18, y);
+        AddLabel(Strings.Get("Mqtt.BrokerHost"), 18, y);
         AddControl(_host, null, 150, y - 4, 270);
         y += 38;
 
@@ -58,43 +59,43 @@ internal sealed class MqttSettingsForm : Form
         AddControl(_port, null, 150, y - 4, 120);
         y += 38;
 
-        AddLabel("Felhasznalo", 18, y);
+        AddLabel(Strings.Get("Mqtt.Username"), 18, y);
         AddControl(_username, null, 150, y - 4, 270);
         y += 38;
 
-        AddLabel("Jelszo", 18, y);
+        AddLabel(Strings.Get("Mqtt.Password"), 18, y);
         _password.UseSystemPasswordChar = true;
         AddControl(_password, null, 150, y - 4, 270);
         y += 42;
 
-        AddControl(_tls, "TLS hasznalata", 18, y, 380);
+        AddControl(_tls, Strings.Get("Mqtt.UseTls"), 18, y, 380);
         y += 32;
-        AddControl(_retainDiscovery, "Discovery retain flag", 18, y, 380);
+        AddControl(_retainDiscovery, Strings.Get("Mqtt.RetainDiscovery"), 18, y, 380);
         y += 32;
-        AddControl(_notifications, "Ertesitesek MQTT-n", 18, y, 380);
+        AddControl(_notifications, Strings.Get("Mqtt.Notifications"), 18, y, 380);
         y += 32;
-        AddControl(_mediaPlayer, "Media player MQTT-n", 18, y, 380);
+        AddControl(_mediaPlayer, Strings.Get("Mqtt.MediaPlayer"), 18, y, 380);
         y += 32;
-        AddControl(_buttons, "Gombok MQTT-n (szerepkorok alapjan)", 18, y, 380);
+        AddControl(_buttons, Strings.Get("Mqtt.ButtonsByRoles"), 18, y, 380);
         _buttons.Enabled = false;
         y += 32;
-        AddControl(_systemSensors, "Gepallapot szenzorok MQTT-n", 18, y, 380);
+        AddControl(_systemSensors, Strings.Get("Mqtt.SystemSensors"), 18, y, 380);
         y += 38;
 
-        AddLabel("Szenzor frissites", 18, y);
+        AddLabel(Strings.Get("Cap.SensorInterval"), 18, y);
         _systemSensorsInterval.Minimum = 5;
         _systemSensorsInterval.Maximum = 3600;
         AddControl(_systemSensorsInterval, null, 150, y - 4, 120);
         Controls.Add(new Label
         {
-            Text = "masodperc",
+            Text = Strings.Get("Cap.Seconds"),
             Location = new Point(280, y),
             Size = new Size(110, 24)
         });
 
         var save = new Button
         {
-            Text = "Mentés",
+            Text = Strings.Get("Btn.Save"),
             Size = new Size(100, 34),
             Location = new Point(ClientSize.Width - 228, ClientSize.Height - 52)
         };
@@ -102,7 +103,7 @@ internal sealed class MqttSettingsForm : Form
 
         var cancel = new Button
         {
-            Text = "Mégse",
+            Text = Strings.Get("Btn.Cancel"),
             Size = new Size(100, 34),
             Location = new Point(ClientSize.Width - 118, ClientSize.Height - 52)
         };
@@ -134,7 +135,7 @@ internal sealed class MqttSettingsForm : Form
     {
         if (string.IsNullOrWhiteSpace(_host.Text))
         {
-            MessageBox.Show("A broker host nem lehet ures.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(Strings.Get("Mqtt.HostRequired"), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

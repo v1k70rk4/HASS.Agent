@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HASS.Agent.Companion.SystemCommands;
 
 namespace HASS.Agent.Companion.Http;
 
@@ -69,6 +70,6 @@ internal sealed record ApiCapabilitiesResponse(
     [property: JsonPropertyName("media_player")] bool MediaPlayer,
     [property: JsonPropertyName("buttons")] bool Buttons,
     [property: JsonPropertyName("system_sensors")] bool SystemSensors,
-    [property: JsonPropertyName("commands")] IReadOnlyList<string> Commands,
+    [property: JsonPropertyName("commands")] IReadOnlyList<SystemCommandDescriptor> Commands,
     [property: JsonPropertyName("custom_sensors")] IReadOnlyList<HASS.Agent.Companion.SystemStatus.CustomSensorDescriptor>? CustomSensors = null,
     [property: JsonPropertyName("standard_sensors")] IReadOnlyList<HASS.Agent.Companion.SystemStatus.BuiltInSensorDescriptor>? StandardSensors = null);

@@ -1,0 +1,193 @@
+namespace HASS.Agent.Companion.Localization;
+
+internal static partial class Strings
+{
+    private static readonly Dictionary<string, string> Hu = new()
+    {
+
+            // Nav
+            ["Nav.General"] = "Általános",
+            ["Nav.Mqtt"] = "MQTT",
+            ["Nav.Capabilities"] = "Képességek",
+            ["Nav.Sensors"] = "Szenzorok",
+            ["Nav.Service"] = "Szolgáltatás",
+            ["Nav.About"] = "Névjegy",
+
+            // Bottom bar
+            ["Btn.Save"] = "Mentés",
+            ["Btn.Close"] = "Bezárás",
+            ["Btn.Cancel"] = "Mégse",
+
+            // General page
+            ["General.Title"] = "Általános beállítások",
+            ["General.Device"] = "Eszköz",
+            ["General.DeviceName"] = "Eszköznév",
+            ["General.BindHost"] = "Figyelési cím",
+            ["General.Port"] = "Port",
+            ["General.AutoStart"] = "Automatikus indítás bejelentkezéskor",
+            ["General.ShowStartup"] = "Értesítés megjelenítése induláskor",
+            ["General.Network"] = "Hálózat",
+            ["General.CopyUrl"] = "URL másolása",
+            ["General.Files"] = "Fájlok",
+            ["General.Settings"] = "Beállítások",
+            ["General.Log"] = "Napló",
+            ["General.OpenFolder"] = "Mappa megnyitása",
+            ["General.Language"] = "Program nyelv",
+            ["General.HaLanguage"] = "HA entitás nyelv",
+
+            // MQTT page
+            ["Mqtt.Title"] = "MQTT beállítások",
+            ["Mqtt.Connection"] = "Kapcsolat",
+            ["Mqtt.Enable"] = "MQTT engedélyezése",
+            ["Mqtt.BrokerHost"] = "Broker cím",
+            ["Mqtt.Port"] = "Port",
+            ["Mqtt.Username"] = "Felhasználónév",
+            ["Mqtt.Password"] = "Jelszó",
+            ["Mqtt.UseTls"] = "TLS használata",
+            ["Mqtt.RetainDiscovery"] = "Discovery retain flag",
+            ["Mqtt.Notifications"] = "Értesítések MQTT-n",
+            ["Mqtt.MediaPlayer"] = "Médialejátszó MQTT-n",
+            ["Mqtt.ButtonsByRoles"] = "Gombok MQTT-n (szerepkörök alapján)",
+            ["Mqtt.SystemSensors"] = "Gépállapot szenzorok MQTT-n",
+            ["Mqtt.HostRequired"] = "A broker cím nem lehet üres.",
+
+            // Capabilities page
+            ["Cap.Title"] = "Képességek",
+            ["Cap.Functions"] = "Funkciók",
+            ["Cap.Notifications"] = "Értesítések (tray app)",
+            ["Cap.MediaPlayer"] = "Médialejátszó (tray app)",
+            ["Cap.SensorsService"] = "Rendszerszenzorok — szolgáltatás",
+            ["Cap.SensorsApp"] = "Rendszerszenzorok — tray app",
+            ["Cap.SensorInterval"] = "Szenzor frissítés",
+            ["Cap.Seconds"] = "másodperc",
+            ["Cap.Commands"] = "Rendszerparancsok",
+            ["Cap.WindowTitle"] = "képességek",
+            ["Cap.Heading"] = "Mi kezelje és mit hirdessen a Home Assistant felé?",
+            ["Cap.What"] = "Mi",
+            ["Cap.NotificationsShort"] = "Értesítések",
+            ["Cap.MediaPlayerShort"] = "Médialejátszó",
+            ["Cap.SystemSensorsShort"] = "Gépállapot szenzorok",
+            ["Cap.ServiceReloadHint"] = "A service pipák mentése után a futó service automatikusan újratölti a beállításokat. Üres service cella = jelenleg nem service-kompatibilis.",
+
+            // Sensors page
+            ["Sensors.Title"] = "Szenzorok",
+            ["Sensors.BuiltIn"] = "Beépített szenzorok",
+            ["Sensors.Custom"] = "Egyedi szenzorok",
+            ["Sensors.Sensor"] = "Szenzor",
+            ["Sensors.Active"] = "Aktív",
+            ["Sensors.Type"] = "Típus",
+            ["Sensors.Name"] = "Név",
+            ["Sensors.Parameter"] = "Paraméter",
+            ["Sensors.Add"] = "Hozzáadás",
+            ["Sensors.Remove"] = "Törlés",
+            ["Sensors.NewSensor"] = "Új szenzor",
+            ["Sensors.WindowTitle"] = "szenzorok",
+            ["Sensors.Basic"] = "Alap szenzorok",
+            ["Sensors.CustomAdd"] = "Egyedi hozzáadás",
+            ["Sensors.CustomRemove"] = "Egyedi törlés",
+
+            // Service page
+            ["Service.Title"] = "Szolgáltatás",
+            ["Service.Status"] = "Állapot",
+            ["Service.Refresh"] = "Frissítés",
+            ["Service.Actions"] = "Műveletek",
+            ["Service.Install"] = "Telepítés / frissítés",
+            ["Service.Start"] = "Indítás",
+            ["Service.Stop"] = "Leállítás",
+            ["Service.Uninstall"] = "Eltávolítás",
+            ["Service.ConfirmUninstall"] = "Biztosan eltávolítod a szolgáltatást?",
+
+            // About page
+            ["About.Version"] = "Verzió",
+            ["About.Developer"] = "Fejlesztő",
+            ["About.Description"] = "Modern .NET 10 Windows kliens a Home Assistant integrációhoz.",
+
+            // Messages
+            ["Msg.SettingsSaved"] = "Beállítások mentve.",
+            ["Msg.RestartRequired"] = "A nyelv megváltoztatásához indítsd újra az alkalmazást.",
+
+            // Tray
+            ["Tray.Open"] = "Megnyitás",
+            ["Tray.CopyUrl"] = "URL másolása",
+            ["Tray.Exit"] = "Kilépés",
+            ["Tray.ServiceCommand"] = "System service parancs elindítva.",
+            ["Tray.ServiceStatus"] = "Status",
+            ["Tray.ServiceInstall"] = "Telepítés / frissítés",
+            ["Tray.ServiceStart"] = "Indítás",
+            ["Tray.ServiceStop"] = "Leállítás",
+            ["Tray.ServiceUninstall"] = "Eltávolítás",
+
+            // Service manager
+            ["SvcMgr.Installed"] = "Telepítve",
+            ["SvcMgr.Yes"] = "igen",
+            ["SvcMgr.No"] = "nem",
+            ["SvcMgr.Status"] = "Állapot",
+            ["SvcMgr.StartType"] = "Indítás",
+            ["SvcMgr.NotInstalled"] = "A service nincs telepítve.",
+            ["SvcMgr.StatusError"] = "Service status hiba: {0}",
+            ["SvcMgr.Unknown"] = "ismeretlen",
+            ["SvcMgr.OsRequired"] = "A {0} telepítéséhez Windows 10 2004 (build 19041) vagy újabb rendszer szükséges. Windows 11 ajánlott.",
+            ["SvcMgr.UnknownCommand"] = "Ismeretlen service parancs: {0}",
+            ["SvcMgr.DeletePending"] = "A régi service még törlés alatt áll. Várj pár másodpercet, majd próbáld újra.",
+            ["SvcMgr.InstalledNotStarted"] = "A service települt, de nem indult el.",
+            ["SvcMgr.InstalledAndStarted"] = "A {0} telepítve és elindítva.",
+            ["SvcMgr.ScFailed"] = "Nem sikerült elindítani az sc.exe-t.",
+
+            // System commands
+            ["Cmd.lock"] = "Gép zárolása",
+            ["Cmd.sleep"] = "Alvás",
+            ["Cmd.monitor_off"] = "Monitor kikapcsolása",
+            ["Cmd.volume_up"] = "Hangerő fel",
+            ["Cmd.volume_down"] = "Hangerő le",
+            ["Cmd.toggle_mute"] = "Némítás váltása",
+            ["Cmd.shutdown"] = "Leállítás",
+            ["Cmd.restart"] = "Újraindítás",
+            ["Cmd.restart_cancel"] = "Leállítás/újraindítás megszakítása",
+            ["Cmd.shutdown_comment"] = "Home Assistantból leállítva",
+            ["Cmd.restart_comment"] = "Home Assistantból újraindítva",
+
+            // Built-in sensors
+            ["Sensor.cpu_usage"] = "CPU terhelés",
+            ["Sensor.memory_usage"] = "Memória használat",
+            ["Sensor.memory_available_mb"] = "Szabad memória",
+            ["Sensor.system_drive_free_percent"] = "Rendszermeghajtó szabad %",
+            ["Sensor.system_drive_free_gb"] = "Rendszermeghajtó szabad hely",
+            ["Sensor.uptime_seconds"] = "Uptime",
+            ["Sensor.battery_level"] = "Akkumulátor",
+            ["Sensor.power_status"] = "Tápellátás",
+            ["Sensor.network_address"] = "LAN IP",
+            ["Sensor.session_state"] = "Munkamenet állapot",
+            ["Sensor.logged_in_user"] = "Bejelentkezett felhasználó",
+            ["Sensor.pending_reboot"] = "Újraindítás szükséges",
+            ["Sensor.boot_time"] = "Boot idő",
+            ["Sensor.battery_time_remaining"] = "Akkumulátor hátralévő idő",
+            ["Sensor.vpn_connected"] = "VPN csatlakozva",
+            ["Sensor.wifi_ssid"] = "Wi-Fi SSID",
+            ["Sensor.wifi_signal"] = "Wi-Fi jelerősség",
+            ["Sensor.logged_in_users"] = "Bejelentkezett felhasználók",
+            ["Sensor.rdp_sessions"] = "RDP munkamenetek",
+            ["Sensor.bluetooth_enabled"] = "Bluetooth engedélyezve",
+            ["Sensor.windows_update_pending"] = "Windows Update függőben",
+            ["Sensor.event_log_errors_recent"] = "Friss eseménynapló hibák",
+            ["Sensor.last_shutdown_reason"] = "Utolsó leállítás oka",
+            ["Sensor.active_window"] = "Aktív ablak",
+            ["Sensor.active_process"] = "Aktív processz",
+            ["Sensor.foreground_app_title"] = "Aktív alkalmazás és ablak",
+            ["Sensor.volume"] = "Hangerő",
+            ["Sensor.muted"] = "Némítva",
+            ["Sensor.monitor_power_state"] = "Monitor állapot",
+            ["Sensor.active_display"] = "Aktív kijelzők",
+            ["Sensor.idle_time_seconds"] = "Inaktív idő",
+            ["Sensor.session_locked"] = "Munkamenet zárolva",
+            ["Sensor.user_present"] = "Felhasználó jelen van",
+            ["Sensor.clipboard_text_available"] = "Vágólapon szöveg",
+            ["Sensor.audio_output_device"] = "Audio kimenet",
+            ["Sensor.microphone_muted"] = "Mikrofon némítva",
+
+            // Custom sensor types
+            ["SensorType.process_running"] = "Futó folyamat",
+            ["SensorType.service_status"] = "Szolgáltatás állapot",
+            ["SensorType.disk_free"] = "Szabad lemezterület",
+    };
+}
+

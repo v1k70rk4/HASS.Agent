@@ -205,7 +205,10 @@ This repository includes a Windows GitHub Actions workflow for the .NET 10 clien
 - `dotnet restore`
 - `dotnet build -c Release`
 - self-contained `win-x64` publish
-- downloadable build artifact from manual workflow runs
+- Inno Setup installer build
+- downloadable artifacts from manual workflow runs:
+  - `HASS.Agent.NET10-win-x64`
+  - `HASS.Agent.NET10-Setup`
 
 The technical developer notes live here:
 

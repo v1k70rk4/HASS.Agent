@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using HASS.Agent.Companion.Configuration;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.SystemStatus;
 
@@ -20,7 +21,7 @@ internal sealed class CustomSensorsForm : Form
         _settings = settings;
         _paths = paths;
 
-        Text = $"{AppIdentity.DisplayName} - szenzorok";
+        Text = $"{AppIdentity.DisplayName} - {Strings.Get("Sensors.WindowTitle")}";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = false;
@@ -36,7 +37,7 @@ internal sealed class CustomSensorsForm : Form
     {
         Controls.Add(new Label
         {
-            Text = "Szenzorok",
+            Text = Strings.Get("Sensors.Title"),
             Location = new Point(18, 14),
             Size = new Size(760, 24),
             Font = new Font(Font, FontStyle.Bold)
@@ -49,8 +50,8 @@ internal sealed class CustomSensorsForm : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
         };
 
-        var builtInPage = new TabPage("Alap szenzorok");
-        var customPage = new TabPage("Egyedi szenzorok");
+        var builtInPage = new TabPage(Strings.Get("Sensors.Basic"));
+        var customPage = new TabPage(Strings.Get("Sensors.Custom"));
         SetupBuiltInGrid();
         SetupCustomGrid();
         builtInPage.Controls.Add(_builtInGrid);
@@ -61,7 +62,7 @@ internal sealed class CustomSensorsForm : Form
 
         var add = new Button
         {
-            Text = "Egyedi hozzaadas",
+            Text = Strings.Get("Sensors.CustomAdd"),
             Size = new Size(130, 34),
             Location = new Point(18, ClientSize.Height - 52),
             Anchor = AnchorStyles.Left | AnchorStyles.Bottom
@@ -70,7 +71,7 @@ internal sealed class CustomSensorsForm : Form
 
         var remove = new Button
         {
-            Text = "Egyedi torles",
+            Text = Strings.Get("Sensors.CustomRemove"),
             Size = new Size(110, 34),
             Location = new Point(158, ClientSize.Height - 52),
             Anchor = AnchorStyles.Left | AnchorStyles.Bottom
@@ -79,7 +80,7 @@ internal sealed class CustomSensorsForm : Form
 
         var save = new Button
         {
-            Text = "Mentes",
+            Text = Strings.Get("Btn.Save"),
             Size = new Size(100, 34),
             Location = new Point(ClientSize.Width - 228, ClientSize.Height - 52),
             Anchor = AnchorStyles.Right | AnchorStyles.Bottom
@@ -88,7 +89,7 @@ internal sealed class CustomSensorsForm : Form
 
         var cancel = new Button
         {
-            Text = "Megse",
+            Text = Strings.Get("Btn.Cancel"),
             Size = new Size(100, 34),
             Location = new Point(ClientSize.Width - 118, ClientSize.Height - 52),
             Anchor = AnchorStyles.Right | AnchorStyles.Bottom
@@ -110,7 +111,7 @@ internal sealed class CustomSensorsForm : Form
         _builtInGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Name",
-            HeaderText = "Nev",
+            HeaderText = Strings.Get("Sensors.Name"),
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
             ReadOnly = true
         });
@@ -135,13 +136,13 @@ internal sealed class CustomSensorsForm : Form
         _customGrid.Columns.Add(new DataGridViewCheckBoxColumn
         {
             Name = "Enabled",
-            HeaderText = "Aktiv",
+            HeaderText = Strings.Get("Sensors.Active"),
             Width = 60
         });
         _customGrid.Columns.Add(new DataGridViewComboBoxColumn
         {
             Name = "Type",
-            HeaderText = "Tipus",
+            HeaderText = Strings.Get("Sensors.Type"),
             Width = 150,
             DataSource = new[]
             {
@@ -153,13 +154,13 @@ internal sealed class CustomSensorsForm : Form
         _customGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Name",
-            HeaderText = "Nev",
+            HeaderText = Strings.Get("Sensors.Name"),
             Width = 180
         });
         _customGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Parameter",
-            HeaderText = "Parameter",
+            HeaderText = Strings.Get("Sensors.Parameter"),
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
         });
         _customGrid.Columns.Add(new DataGridViewCheckBoxColumn
@@ -191,7 +192,7 @@ internal sealed class CustomSensorsForm : Form
         foreach (var definition in BuiltInSensorCatalog.Sensors)
         {
             var setting = _settings.BuiltInSensors.First(sensor => sensor.Key == definition.Key);
-            var rowIndex = _builtInGrid.Rows.Add(definition.Name, setting.Service, setting.TrayApp);
+            var rowIndex = _builtInGrid.Rows.Add(Strings.Get($"Sensor.{definition.Key}"), setting.Service, setting.TrayApp);
             _builtInGrid.Rows[rowIndex].Tag = definition.Key;
             _builtInGrid.Rows[rowIndex].Cells["Service"].ReadOnly = !definition.SupportsService;
             _builtInGrid.Rows[rowIndex].Cells["TrayApp"].ReadOnly = !definition.SupportsTrayApp;
@@ -215,7 +216,7 @@ internal sealed class CustomSensorsForm : Form
     {
         AddCustomRow(new CustomSensorDefinition
         {
-            Name = "Uj szenzor",
+            Name = Strings.Get("Sensors.NewSensor"),
             Parameter = "notepad",
             Type = CustomSensorTypes.ProcessRunning,
             Enabled = true,

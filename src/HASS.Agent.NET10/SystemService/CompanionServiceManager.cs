@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.ServiceProcess;
 using System.Text;
 using System.Windows.Forms;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Logging;
 using HASS.Agent.Companion.Runtime;
 
@@ -12,6 +13,8 @@ internal static class CompanionServiceManager
     public const string ServiceName = AppIdentity.ServiceName;
     private const string DisplayName = AppIdentity.ServiceDisplayName;
     private const string Description = AppIdentity.ServiceDescription;
+
+    private static string S(string key) => Strings.Get(key);
 
     public static bool TryHandleCommandLine(string[] args)
     {
@@ -27,11 +30,14 @@ internal static class CompanionServiceManager
         }
 
         var result = ExecuteControlCommand(command);
-        MessageBox.Show(
-            result.Message,
-            AppIdentity.ServiceDisplayName,
-            MessageBoxButtons.OK,
-            result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        if (!args.Any(arg => string.Equals(arg, "--quiet", StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show(
+                result.Message,
+                AppIdentity.ServiceDisplayName,
+                MessageBoxButtons.OK,
+                result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
 
         return true;
     }
@@ -61,15 +67,15 @@ internal static class CompanionServiceManager
         try
         {
             using var controller = new ServiceController(ServiceName);
-            return $"Telepítve: igen{Environment.NewLine}Állapot: {controller.Status}{Environment.NewLine}Indítás: {GetStartModeText()}";
+            return $"{S("SvcMgr.Installed")}: {S("SvcMgr.Yes")}{Environment.NewLine}{S("SvcMgr.Status")}: {controller.Status}{Environment.NewLine}{S("SvcMgr.StartType")}: {GetStartModeText()}";
         }
         catch (InvalidOperationException)
         {
-            return "Telepítve: nem";
+            return $"{S("SvcMgr.Installed")}: {S("SvcMgr.No")}";
         }
         catch (Exception ex)
         {
-            return $"Service status hiba: {ex.Message}";
+            return string.Format(S("SvcMgr.StatusError"), ex.Message);
         }
     }
 
@@ -77,7 +83,7 @@ internal static class CompanionServiceManager
     {
         if (command == "--install-service" && !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
         {
-            return new ControlCommandResult(false, $"A {AppIdentity.DisplayName} telepítéséhez Windows 10 2004 (build 19041) vagy újabb rendszer szükséges. Windows 11 ajánlott.");
+            return new ControlCommandResult(false, string.Format(S("SvcMgr.OsRequired"), AppIdentity.DisplayName));
         }
 
         return command switch
@@ -86,7 +92,7 @@ internal static class CompanionServiceManager
             "--uninstall-service" => Uninstall(),
             "--start-service" => RunSc("start", Quote(ServiceName)),
             "--stop-service" => RunSc("stop", Quote(ServiceName)),
-            _ => new ControlCommandResult(false, $"Ismeretlen service parancs: {command}")
+            _ => new ControlCommandResult(false, string.Format(S("SvcMgr.UnknownCommand"), command))
         };
     }
 
@@ -107,7 +113,7 @@ internal static class CompanionServiceManager
 
             if (!WaitUntilNotInstalled(TimeSpan.FromSeconds(10)))
             {
-                return new ControlCommandResult(false, "A regi service meg torles alatt all. Varj par masodpercet, majd probald ujra.");
+                return new ControlCommandResult(false, S("SvcMgr.DeletePending"));
             }
         }
 
@@ -126,17 +132,17 @@ internal static class CompanionServiceManager
         var start = RunSc("start", Quote(ServiceName));
         if (!start.Success)
         {
-            return new ControlCommandResult(false, $"A service települt, de nem indult el.{Environment.NewLine}{start.Message}");
+            return new ControlCommandResult(false, $"{S("SvcMgr.InstalledNotStarted")}{Environment.NewLine}{start.Message}");
         }
 
-        return new ControlCommandResult(true, $"A {AppIdentity.ServiceDisplayName} telepítve és elindítva.");
+        return new ControlCommandResult(true, string.Format(S("SvcMgr.InstalledAndStarted"), AppIdentity.ServiceDisplayName));
     }
 
     private static ControlCommandResult Uninstall()
     {
         if (!IsInstalled())
         {
-            return new ControlCommandResult(true, "A service nincs telepítve.");
+            return new ControlCommandResult(true, S("SvcMgr.NotInstalled"));
         }
 
         _ = RunSc("stop", Quote(ServiceName));
@@ -166,7 +172,6 @@ internal static class CompanionServiceManager
         }
         catch
         {
-            // The sc.exe delete call below will return a useful error if stopping failed.
         }
     }
 
@@ -191,14 +196,14 @@ internal static class CompanionServiceManager
         var query = RunSc("qc", Quote(ServiceName));
         if (!query.Success)
         {
-            return "ismeretlen";
+            return S("SvcMgr.Unknown");
         }
 
         var line = query.Message
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault(item => item.Contains("START_TYPE", StringComparison.OrdinalIgnoreCase));
 
-        return line?.Trim() ?? "ismeretlen";
+        return line?.Trim() ?? S("SvcMgr.Unknown");
     }
 
     private static ControlCommandResult RunSc(string command, string arguments)
@@ -219,7 +224,7 @@ internal static class CompanionServiceManager
 
             if (process is null)
             {
-                return new ControlCommandResult(false, "Nem sikerült elindítani az sc.exe-t.");
+                return new ControlCommandResult(false, S("SvcMgr.ScFailed"));
             }
 
             var output = process.StandardOutput.ReadToEnd();

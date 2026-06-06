@@ -5,6 +5,7 @@ using HASS.Agent.Companion.Configuration;
 using HASS.Agent.Companion.Http;
 using HASS.Agent.Companion.Logging;
 using HASS.Agent.Companion.Networking;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.SystemService;
 
@@ -19,6 +20,7 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
     private readonly NotifyIcon _notifyIcon;
     private readonly List<ActionNotificationForm> _actionNotifications = [];
     private string? _pendingNotificationAction;
+    private MainForm? _mainForm;
 
     public event EventHandler<NotificationActionRequestedEventArgs>? NotificationActionRequested;
     public event EventHandler? SettingsSaved;
@@ -39,7 +41,7 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
             ContextMenuStrip = BuildContextMenu()
         };
 
-        _notifyIcon.DoubleClick += (_, _) => ShowStatus();
+        _notifyIcon.DoubleClick += (_, _) => OpenMainForm();
         _notifyIcon.BalloonTipClicked += (_, _) => PublishPendingNotificationAction();
     }
 
@@ -96,15 +98,12 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
     {
         var menu = new ContextMenuStrip();
 
-        menu.Items.Add("Status", null, (_, _) => ShowStatus());
-        menu.Items.Add("MQTT beállítások", null, (_, _) => ShowMqttSettings());
-        menu.Items.Add("Kepessegek / szerepkorok", null, (_, _) => ShowCapabilitiesSettings());
-        menu.Items.Add("Szenzorok", null, (_, _) => ShowCustomSensors());
-        menu.Items.Add(BuildServiceMenu());
-        menu.Items.Add("Copy Local API URL", null, (_, _) => CopyApiUrl());
-        menu.Items.Add("Open settings folder", null, (_, _) => OpenSettingsFolder());
+        menu.Items.Add(Strings.Get("Tray.Open"), null, (_, _) => OpenMainForm());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) => ExitThread());
+        menu.Items.Add(BuildServiceMenu());
+        menu.Items.Add(Strings.Get("Tray.CopyUrl"), null, (_, _) => CopyApiUrl());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(Strings.Get("Tray.Exit"), null, (_, _) => ExitThread());
 
         return menu;
     }
@@ -112,56 +111,35 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
     private ToolStripMenuItem BuildServiceMenu()
     {
         var serviceMenu = new ToolStripMenuItem("System service");
-        serviceMenu.DropDownItems.Add("Status", null, (_, _) => ShowServiceStatus());
+        serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceStatus"), null, (_, _) => ShowServiceStatus());
         serviceMenu.DropDownItems.Add(new ToolStripSeparator());
-        serviceMenu.DropDownItems.Add("Telepítés / frissítés", null, (_, _) => RunServiceCommand("--install-service"));
-        serviceMenu.DropDownItems.Add("Indítás", null, (_, _) => RunServiceCommand("--start-service"));
-        serviceMenu.DropDownItems.Add("Leállítás", null, (_, _) => RunServiceCommand("--stop-service"));
-        serviceMenu.DropDownItems.Add("Eltávolítás", null, (_, _) => RunServiceCommand("--uninstall-service"));
+        serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceInstall"), null, (_, _) => RunServiceCommand("--install-service"));
+        serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceStart"), null, (_, _) => RunServiceCommand("--start-service"));
+        serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceStop"), null, (_, _) => RunServiceCommand("--stop-service"));
+        serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceUninstall"), null, (_, _) => RunServiceCommand("--uninstall-service"));
 
         return serviceMenu;
     }
 
-    private void ShowStatus()
+    private void OpenMainForm()
     {
-        var lanUrls = string.Join(Environment.NewLine, NetworkInfo.GetLanUrls(_settings.Port));
+        if (_mainForm is not null && !_mainForm.IsDisposed)
+        {
+            _mainForm.BringToFront();
+            _mainForm.Activate();
+            return;
+        }
 
-        MessageBox.Show(
-            $"Device: {_settings.DeviceName}{Environment.NewLine}" +
-            $"Listening on: {_settings.ListenUrl}{Environment.NewLine}" +
-            $"Use in Home Assistant:{Environment.NewLine}{lanUrls}{Environment.NewLine}" +
-            $"Settings: {_paths.SettingsFile}{Environment.NewLine}" +
-            $"Log: {_paths.LogFile}",
-            AppIdentity.DisplayName,
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        _mainForm = new MainForm(_settings, _paths, _log);
+        _mainForm.SettingsSaved += (_, _) => SettingsSaved?.Invoke(this, EventArgs.Empty);
+        _mainForm.FormClosed += (_, _) => _mainForm = null;
+        _mainForm.Show();
     }
 
     private void CopyApiUrl()
     {
         Clipboard.SetText(NetworkInfo.GetPreferredLanUrl(_settings.Port));
         _notifyIcon.ShowBalloonTip(3000, AppIdentity.DisplayName, "Home Assistant URL copied.", ToolTipIcon.Info);
-    }
-
-    private void ShowMqttSettings()
-    {
-        using var form = new MqttSettingsForm(_settings, _paths);
-        form.SettingsSaved += (_, _) => SettingsSaved?.Invoke(this, EventArgs.Empty);
-        form.ShowDialog();
-    }
-
-    private void ShowCapabilitiesSettings()
-    {
-        using var form = new CapabilitiesSettingsForm(_settings, _paths);
-        form.SettingsSaved += (_, _) => SettingsSaved?.Invoke(this, EventArgs.Empty);
-        form.ShowDialog();
-    }
-
-    private void ShowCustomSensors()
-    {
-        using var form = new CustomSensorsForm(_settings, _paths);
-        form.SettingsSaved += (_, _) => SettingsSaved?.Invoke(this, EventArgs.Empty);
-        form.ShowDialog();
     }
 
     private static void ShowServiceStatus()
@@ -176,7 +154,7 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
     private void RunServiceCommand(string command)
     {
         CompanionServiceManager.RunElevated(command, _log);
-        _notifyIcon.ShowBalloonTip(3000, AppIdentity.DisplayName, "System service parancs elindítva.", ToolTipIcon.Info);
+        _notifyIcon.ShowBalloonTip(3000, AppIdentity.DisplayName, Strings.Get("Tray.ServiceCommand"), ToolTipIcon.Info);
     }
 
     private void OpenSettingsFolder()

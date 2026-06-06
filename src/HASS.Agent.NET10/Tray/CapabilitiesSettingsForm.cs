@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using HASS.Agent.Companion.Configuration;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.SystemCommands;
 
@@ -23,7 +24,7 @@ internal sealed class CapabilitiesSettingsForm : Form
         _settings = settings;
         _paths = paths;
 
-        Text = $"{AppIdentity.DisplayName} - kepessegek";
+        Text = $"{AppIdentity.DisplayName} - {Strings.Get("Cap.WindowTitle")}";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -39,7 +40,7 @@ internal sealed class CapabilitiesSettingsForm : Form
     {
         Controls.Add(new Label
         {
-            Text = "Mi kezelje es mit hirdessen a Home Assistant fele?",
+            Text = Strings.Get("Cap.Heading"),
             Location = new Point(18, 14),
             Size = new Size(560, 24),
             Font = new Font(Font, FontStyle.Bold)
@@ -70,27 +71,27 @@ internal sealed class CapabilitiesSettingsForm : Form
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
 
-        AddHeader(table, "Mi", 0);
+        AddHeader(table, Strings.Get("Cap.What"), 0);
         AddHeader(table, "Service", 1);
         AddHeader(table, "Tray app", 2);
 
         var row = 1;
         AddRowStyle(table);
-        AddFeatureRow(table, row++, "Ertesitesek", serviceCheckBox: null, _notificationsApp);
+        AddFeatureRow(table, row++, Strings.Get("Cap.NotificationsShort"), serviceCheckBox: null, _notificationsApp);
         AddRowStyle(table);
-        AddFeatureRow(table, row++, "Media player", serviceCheckBox: null, _mediaPlayerApp);
+        AddFeatureRow(table, row++, Strings.Get("Cap.MediaPlayerShort"), serviceCheckBox: null, _mediaPlayerApp);
         AddRowStyle(table);
-        AddFeatureRow(table, row++, "Gepallapot szenzorok", _systemSensorsService, _systemSensorsApp);
+        AddFeatureRow(table, row++, Strings.Get("Cap.SystemSensorsShort"), _systemSensorsService, _systemSensorsApp);
 
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
-        AddSectionRow(table, row++, "Rendszerparancsok");
+        AddSectionRow(table, row++, Strings.Get("Cap.Commands"));
 
         foreach (var command in SystemCommandCatalog.Commands)
         {
             AddRowStyle(table);
             var service = command.SupportsService ? new CheckBox() : null;
             var app = new CheckBox { Enabled = command.SupportsTrayApp };
-            AddFeatureRow(table, row++, command.DisplayName, service, app);
+            AddFeatureRow(table, row++, Strings.Get($"Cmd.{command.Name}"), service, app);
             _commandRows.Add(new CommandRow(command, service, app));
         }
 
@@ -99,14 +100,14 @@ internal sealed class CapabilitiesSettingsForm : Form
 
         Controls.Add(new Label
         {
-            Text = "A service pipak mentese utan a futo service automatikusan ujratolti a beallitasokat. Ures service cella = jelenleg nem service-kompatibilis.",
+            Text = Strings.Get("Cap.ServiceReloadHint"),
             Location = new Point(18, 520),
             Size = new Size(560, 36)
         });
 
         var save = new Button
         {
-            Text = "Mentes",
+            Text = Strings.Get("Btn.Save"),
             Size = new Size(100, 34),
             Location = new Point(ClientSize.Width - 228, ClientSize.Height - 48)
         };
@@ -114,7 +115,7 @@ internal sealed class CapabilitiesSettingsForm : Form
 
         var cancel = new Button
         {
-            Text = "Megse",
+            Text = Strings.Get("Btn.Cancel"),
             Size = new Size(100, 34),
             Location = new Point(ClientSize.Width - 118, ClientSize.Height - 48)
         };

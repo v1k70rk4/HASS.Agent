@@ -18,6 +18,12 @@ internal sealed class CompanionSettings
 
     public bool ShowStartupNotification { get; set; }
 
+    public bool AutoStartOnLogin { get; set; }
+
+    public string Language { get; set; } = "hu";
+
+    public string HaLanguage { get; set; } = "hu";
+
     public string Manufacturer { get; set; } = "v1k70rk4";
 
     public string Model { get; set; } = AppIdentity.DisplayName;
@@ -130,6 +136,8 @@ internal sealed class CompanionSettings
         }
         MqttHost = NormalizeText(MqttHost, "homeassistant.local");
         MqttUsername = MqttUsername.Trim();
+        if (Language is not "hu" and not "en") Language = "hu";
+        if (HaLanguage is not "hu" and not "en") HaLanguage = "hu";
 
         if (string.IsNullOrWhiteSpace(SerialNumber))
         {

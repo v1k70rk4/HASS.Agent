@@ -1,6 +1,7 @@
 using System.ServiceProcess;
 using HASS.Agent.Companion.Configuration;
 using HASS.Agent.Companion.Http;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Logging;
 using HASS.Agent.Companion.Mqtt;
 using HASS.Agent.Companion.Runtime;
@@ -38,6 +39,7 @@ internal sealed class CompanionWindowsService : ServiceBase
         try
         {
             var settings = SettingsStore.LoadOrCreate(_paths, _log);
+            ApplyLanguage(settings);
             _systemCommandService = new SystemCommandService(_log);
             _systemMetricsService = new SystemMetricsService(_log, monitorPowerStateService: null, includeInteractiveMetrics: false);
             StartRuntime(settings);
@@ -124,6 +126,7 @@ internal sealed class CompanionWindowsService : ServiceBase
         {
             _log.Info("Settings changed; reloading system service runtime.");
             var settings = SettingsStore.LoadOrCreate(_paths, _log);
+            ApplyLanguage(settings);
 
             lock (_runtimeLock)
             {
@@ -179,6 +182,12 @@ internal sealed class CompanionWindowsService : ServiceBase
         _mqttService?.StopAsync().GetAwaiter().GetResult();
         _mqttService?.Dispose();
         _mqttService = null;
+    }
+
+    private static void ApplyLanguage(CompanionSettings settings)
+    {
+        Strings.Language = settings.Language;
+        Strings.HaLanguage = settings.HaLanguage;
     }
 
     private void DisposeRuntime()

@@ -8,8 +8,10 @@ using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.SystemCommands;
 using HASS.Agent.Companion.SystemService;
 using HASS.Agent.Companion.SystemStatus;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Tray;
 using System.ServiceProcess;
+using System.Text.Json;
 using System.Windows.Forms;
 
 namespace HASS.Agent.Companion;
@@ -46,6 +48,9 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
+        // Load language early so elevated service commands show localized messages
+        LoadLanguageEarly();
+
         if (CompanionServiceManager.TryHandleCommandLine(args))
         {
             return;
@@ -80,6 +85,17 @@ internal static class Program
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
             return;
+        }
+
+        Localization.Strings.Language = settings.Language;
+        Localization.Strings.HaLanguage = settings.HaLanguage;
+        try
+        {
+            StartupManager.SetEnabled(settings.AutoStartOnLogin);
+        }
+        catch (Exception ex)
+        {
+            log.Warning($"Unable to update startup registration: {ex.Message}");
         }
 
         using var trayContext = new TrayApplicationContext(settings, paths, log);
@@ -135,5 +151,37 @@ internal static class Program
         mqttService.StopAsync().GetAwaiter().GetResult();
         localApi.StopAsync().GetAwaiter().GetResult();
         log.Info($"Stopped {AppIdentity.DisplayName}.");
+    }
+
+    private static void LoadLanguageEarly()
+    {
+        try
+        {
+            var settingsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                AppIdentity.ConfigurationDirectoryName,
+                "settings.json");
+
+            if (!File.Exists(settingsPath))
+            {
+                return;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(settingsPath));
+
+            if (doc.RootElement.TryGetProperty("language", out var lang))
+            {
+                Localization.Strings.Language = lang.GetString() ?? "hu";
+            }
+
+            if (doc.RootElement.TryGetProperty("haLanguage", out var haLang))
+            {
+                Localization.Strings.HaLanguage = haLang.GetString() ?? "hu";
+            }
+        }
+        catch
+        {
+            // Settings file may not exist yet or be unreadable — keep defaults.
+        }
     }
 }

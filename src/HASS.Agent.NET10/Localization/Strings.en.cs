@@ -1,0 +1,193 @@
+namespace HASS.Agent.Companion.Localization;
+
+internal static partial class Strings
+{
+    private static readonly Dictionary<string, string> En = new()
+    {
+
+            // Nav
+            ["Nav.General"] = "General",
+            ["Nav.Mqtt"] = "MQTT",
+            ["Nav.Capabilities"] = "Capabilities",
+            ["Nav.Sensors"] = "Sensors",
+            ["Nav.Service"] = "Service",
+            ["Nav.About"] = "About",
+
+            // Bottom bar
+            ["Btn.Save"] = "Save",
+            ["Btn.Close"] = "Close",
+            ["Btn.Cancel"] = "Cancel",
+
+            // General page
+            ["General.Title"] = "General settings",
+            ["General.Device"] = "Device",
+            ["General.DeviceName"] = "Device name",
+            ["General.BindHost"] = "Bind address",
+            ["General.Port"] = "Port",
+            ["General.AutoStart"] = "Start automatically on login",
+            ["General.ShowStartup"] = "Show notification on startup",
+            ["General.Network"] = "Network",
+            ["General.CopyUrl"] = "Copy URL",
+            ["General.Files"] = "Files",
+            ["General.Settings"] = "Settings",
+            ["General.Log"] = "Log",
+            ["General.OpenFolder"] = "Open folder",
+            ["General.Language"] = "UI language",
+            ["General.HaLanguage"] = "HA entity language",
+
+            // MQTT page
+            ["Mqtt.Title"] = "MQTT settings",
+            ["Mqtt.Connection"] = "Connection",
+            ["Mqtt.Enable"] = "Enable MQTT",
+            ["Mqtt.BrokerHost"] = "Broker address",
+            ["Mqtt.Port"] = "Port",
+            ["Mqtt.Username"] = "Username",
+            ["Mqtt.Password"] = "Password",
+            ["Mqtt.UseTls"] = "Use TLS",
+            ["Mqtt.RetainDiscovery"] = "Discovery retain flag",
+            ["Mqtt.Notifications"] = "Notifications over MQTT",
+            ["Mqtt.MediaPlayer"] = "Media player over MQTT",
+            ["Mqtt.ButtonsByRoles"] = "Buttons over MQTT (based on roles)",
+            ["Mqtt.SystemSensors"] = "System sensors over MQTT",
+            ["Mqtt.HostRequired"] = "Broker address cannot be empty.",
+
+            // Capabilities page
+            ["Cap.Title"] = "Capabilities",
+            ["Cap.Functions"] = "Functions",
+            ["Cap.Notifications"] = "Notifications (tray app)",
+            ["Cap.MediaPlayer"] = "Media player (tray app)",
+            ["Cap.SensorsService"] = "System sensors — service",
+            ["Cap.SensorsApp"] = "System sensors — tray app",
+            ["Cap.SensorInterval"] = "Sensor interval",
+            ["Cap.Seconds"] = "seconds",
+            ["Cap.Commands"] = "System commands",
+            ["Cap.WindowTitle"] = "capabilities",
+            ["Cap.Heading"] = "What should handle and advertise features to Home Assistant?",
+            ["Cap.What"] = "Feature",
+            ["Cap.NotificationsShort"] = "Notifications",
+            ["Cap.MediaPlayerShort"] = "Media player",
+            ["Cap.SystemSensorsShort"] = "System sensors",
+            ["Cap.ServiceReloadHint"] = "After saving service checkboxes, the running service automatically reloads settings. Empty service cell = currently not service-compatible.",
+
+            // Sensors page
+            ["Sensors.Title"] = "Sensors",
+            ["Sensors.BuiltIn"] = "Built-in sensors",
+            ["Sensors.Custom"] = "Custom sensors",
+            ["Sensors.Sensor"] = "Sensor",
+            ["Sensors.Active"] = "Active",
+            ["Sensors.Type"] = "Type",
+            ["Sensors.Name"] = "Name",
+            ["Sensors.Parameter"] = "Parameter",
+            ["Sensors.Add"] = "Add",
+            ["Sensors.Remove"] = "Remove",
+            ["Sensors.NewSensor"] = "New sensor",
+            ["Sensors.WindowTitle"] = "sensors",
+            ["Sensors.Basic"] = "Built-in sensors",
+            ["Sensors.CustomAdd"] = "Add custom",
+            ["Sensors.CustomRemove"] = "Remove custom",
+
+            // Service page
+            ["Service.Title"] = "Service",
+            ["Service.Status"] = "Status",
+            ["Service.Refresh"] = "Refresh",
+            ["Service.Actions"] = "Actions",
+            ["Service.Install"] = "Install / update",
+            ["Service.Start"] = "Start",
+            ["Service.Stop"] = "Stop",
+            ["Service.Uninstall"] = "Uninstall",
+            ["Service.ConfirmUninstall"] = "Are you sure you want to uninstall the service?",
+
+            // About page
+            ["About.Version"] = "Version",
+            ["About.Developer"] = "Developer",
+            ["About.Description"] = "Modern .NET 10 Windows client for Home Assistant integration.",
+
+            // Messages
+            ["Msg.SettingsSaved"] = "Settings saved.",
+            ["Msg.RestartRequired"] = "Please restart the application to apply the language change.",
+
+            // Tray
+            ["Tray.Open"] = "Open",
+            ["Tray.CopyUrl"] = "Copy URL",
+            ["Tray.Exit"] = "Exit",
+            ["Tray.ServiceCommand"] = "System service command started.",
+            ["Tray.ServiceStatus"] = "Status",
+            ["Tray.ServiceInstall"] = "Install / update",
+            ["Tray.ServiceStart"] = "Start",
+            ["Tray.ServiceStop"] = "Stop",
+            ["Tray.ServiceUninstall"] = "Uninstall",
+
+            // System commands
+            // Service manager
+            ["SvcMgr.Installed"] = "Installed",
+            ["SvcMgr.Yes"] = "yes",
+            ["SvcMgr.No"] = "no",
+            ["SvcMgr.Status"] = "Status",
+            ["SvcMgr.StartType"] = "Start type",
+            ["SvcMgr.NotInstalled"] = "Service is not installed.",
+            ["SvcMgr.StatusError"] = "Service status error: {0}",
+            ["SvcMgr.Unknown"] = "unknown",
+            ["SvcMgr.OsRequired"] = "{0} requires Windows 10 2004 (build 19041) or newer. Windows 11 is recommended.",
+            ["SvcMgr.UnknownCommand"] = "Unknown service command: {0}",
+            ["SvcMgr.DeletePending"] = "The old service is still being deleted. Wait a few seconds and try again.",
+            ["SvcMgr.InstalledNotStarted"] = "Service installed but did not start.",
+            ["SvcMgr.InstalledAndStarted"] = "{0} installed and started.",
+            ["SvcMgr.ScFailed"] = "Failed to start sc.exe.",
+
+            ["Cmd.lock"] = "Lock computer",
+            ["Cmd.sleep"] = "Sleep",
+            ["Cmd.monitor_off"] = "Turn off monitor",
+            ["Cmd.volume_up"] = "Volume up",
+            ["Cmd.volume_down"] = "Volume down",
+            ["Cmd.toggle_mute"] = "Toggle mute",
+            ["Cmd.shutdown"] = "Shutdown",
+            ["Cmd.restart"] = "Restart",
+            ["Cmd.restart_cancel"] = "Cancel shutdown/restart",
+            ["Cmd.shutdown_comment"] = "Shut down from Home Assistant",
+            ["Cmd.restart_comment"] = "Restarted from Home Assistant",
+
+            // Built-in sensors
+            ["Sensor.cpu_usage"] = "CPU usage",
+            ["Sensor.memory_usage"] = "Memory usage",
+            ["Sensor.memory_available_mb"] = "Available memory",
+            ["Sensor.system_drive_free_percent"] = "System drive free %",
+            ["Sensor.system_drive_free_gb"] = "System drive free space",
+            ["Sensor.uptime_seconds"] = "Uptime",
+            ["Sensor.battery_level"] = "Battery level",
+            ["Sensor.power_status"] = "Power status",
+            ["Sensor.network_address"] = "LAN IP",
+            ["Sensor.session_state"] = "Session state",
+            ["Sensor.logged_in_user"] = "Logged in user",
+            ["Sensor.pending_reboot"] = "Pending reboot",
+            ["Sensor.boot_time"] = "Boot time",
+            ["Sensor.battery_time_remaining"] = "Battery time remaining",
+            ["Sensor.vpn_connected"] = "VPN connected",
+            ["Sensor.wifi_ssid"] = "Wi-Fi SSID",
+            ["Sensor.wifi_signal"] = "Wi-Fi signal strength",
+            ["Sensor.logged_in_users"] = "Logged in users",
+            ["Sensor.rdp_sessions"] = "RDP sessions",
+            ["Sensor.bluetooth_enabled"] = "Bluetooth enabled",
+            ["Sensor.windows_update_pending"] = "Windows Update pending",
+            ["Sensor.event_log_errors_recent"] = "Recent event log errors",
+            ["Sensor.last_shutdown_reason"] = "Last shutdown reason",
+            ["Sensor.active_window"] = "Active window",
+            ["Sensor.active_process"] = "Active process",
+            ["Sensor.foreground_app_title"] = "Foreground app & window",
+            ["Sensor.volume"] = "Volume",
+            ["Sensor.muted"] = "Muted",
+            ["Sensor.monitor_power_state"] = "Monitor power state",
+            ["Sensor.active_display"] = "Active displays",
+            ["Sensor.idle_time_seconds"] = "Idle time",
+            ["Sensor.session_locked"] = "Session locked",
+            ["Sensor.user_present"] = "User present",
+            ["Sensor.clipboard_text_available"] = "Clipboard text available",
+            ["Sensor.audio_output_device"] = "Audio output device",
+            ["Sensor.microphone_muted"] = "Microphone muted",
+
+            // Custom sensor types
+            ["SensorType.process_running"] = "Process running",
+            ["SensorType.service_status"] = "Service status",
+            ["SensorType.disk_free"] = "Disk free space",
+    };
+}
+
