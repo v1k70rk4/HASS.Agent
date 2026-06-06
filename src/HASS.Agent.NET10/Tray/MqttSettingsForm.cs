@@ -36,8 +36,9 @@ internal sealed class MqttSettingsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(460, 500);
         Font = new Font("Segoe UI", 9F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(520, 560);
 
         BuildForm();
         LoadValues();

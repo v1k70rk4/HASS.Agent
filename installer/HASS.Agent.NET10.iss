@@ -39,6 +39,9 @@ Name: "installservice"; Description: "Install and start the optional system serv
 [Files]
 Source: "..\artifacts\HASS.Agent.NET10\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[Dirs]
+Name: "{commonappdata}\HASS.Agent.NET10"; Permissions: authusers-modify
+
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
@@ -89,6 +92,13 @@ begin
   Result := not TrayWasRunning;
 end;
 
+procedure EnsureConfigDirectoryPermissions();
+begin
+  RunHidden(
+    ExpandConstant('{sys}\icacls.exe'),
+    '"' + ExpandConstant('{commonappdata}\HASS.Agent.NET10') + '" /grant *S-1-5-11:(OI)(CI)M /T /C');
+end;
+
 procedure StopInstalledService();
 begin
   RunHidden(ExpandConstant('{sys}\sc.exe'), 'stop "HASS.Agent.NET10.Service"');
@@ -125,6 +135,8 @@ begin
 
   if CurStep = ssPostInstall then
   begin
+    EnsureConfigDirectoryPermissions();
+
     if ExistingServiceInstalled or WizardIsTaskSelected('installservice') then
     begin
       RunHidden(ExpandConstant('{app}\{#MyAppExeName}'), '--install-service --quiet');

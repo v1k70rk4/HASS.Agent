@@ -38,7 +38,7 @@ internal static class Program
                 return;
             }
 
-            ApplicationConfiguration.Initialize();
+            InitializeWindowsForms();
             MessageBox.Show(
                 $"{AppIdentity.DisplayName} requires Windows 10 version 2004 (build 19041) or newer. Windows 11 is recommended.",
                 AppIdentity.DisplayName,
@@ -53,7 +53,7 @@ internal static class Program
             return;
         }
 
-        ApplicationConfiguration.Initialize();
+        InitializeWindowsForms();
 
         // Load language early so elevated service commands show localized messages
         LoadLanguageEarly();
@@ -185,6 +185,12 @@ internal static class Program
         {
             // Best-effort helper for installers and scripts.
         }
+    }
+
+    private static void InitializeWindowsForms()
+    {
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        ApplicationConfiguration.Initialize();
     }
 
     private static void LoadLanguageEarly()

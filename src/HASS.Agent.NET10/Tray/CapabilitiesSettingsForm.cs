@@ -29,8 +29,9 @@ internal sealed class CapabilitiesSettingsForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(600, 620);
         Font = new Font("Segoe UI", 9F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(660, 700);
 
         BuildForm();
         LoadValues();
@@ -49,7 +50,7 @@ internal sealed class CapabilitiesSettingsForm : Form
         var scroller = new Panel
         {
             Location = new Point(18, 48),
-            Size = new Size(560, 462),
+            Size = new Size(620, 532),
             AutoScroll = true,
             BorderStyle = BorderStyle.FixedSingle
         };
@@ -66,9 +67,9 @@ internal sealed class CapabilitiesSettingsForm : Form
             Padding = Padding.Empty
         };
 
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 342F));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 382F));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
 
         AddHeader(table, Strings.Get("Cap.What"), 0);
@@ -101,8 +102,8 @@ internal sealed class CapabilitiesSettingsForm : Form
         Controls.Add(new Label
         {
             Text = Strings.Get("Cap.ServiceReloadHint"),
-            Location = new Point(18, 520),
-            Size = new Size(560, 36)
+            Location = new Point(18, 590),
+            Size = new Size(620, 44)
         });
 
         var save = new Button

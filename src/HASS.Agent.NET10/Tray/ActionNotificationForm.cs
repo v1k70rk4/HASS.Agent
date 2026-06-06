@@ -33,6 +33,7 @@ internal sealed class ActionNotificationForm : Form
         BackColor = SurfaceColor;
         ForeColor = PrimaryTextColor;
         Font = new Font("Segoe UI", 9F);
+        AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(420, CalculateHeight(notification));
         Padding = new Padding(0);
 

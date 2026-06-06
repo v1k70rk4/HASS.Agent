@@ -74,13 +74,14 @@ internal sealed class MainForm : Form
 
         Text = AppIdentity.DisplayName;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(880, 580);
-        MinimumSize = new Size(780, 480);
         Font = new Font("Segoe UI", 9.5F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(1040, 720);
+        MinimumSize = new Size(900, 620);
         BackColor = PageBg;
         Icon = LoadIcon();
 
-        var sidebar = new Panel { Dock = DockStyle.Left, Width = 220, BackColor = SidebarBg };
+        var sidebar = new Panel { Dock = DockStyle.Left, Width = 240, BackColor = SidebarBg };
         BuildSidebar(sidebar);
 
         var bottomBar = BuildBottomBar();
@@ -139,12 +140,12 @@ internal sealed class MainForm : Form
 
     private Panel CreateNavItem(string text, int index)
     {
-        var item = new Panel { Location = new Point(0, 8 + index * 44), Size = new Size(220, 44), BackColor = SidebarBg, Cursor = Cursors.Hand };
+        var item = new Panel { Location = new Point(0, 8 + index * 44), Size = new Size(240, 44), BackColor = SidebarBg, Cursor = Cursors.Hand };
         var indicator = new Panel { Location = Point.Empty, Size = new Size(3, 44), BackColor = Color.Transparent };
         var label = new Label
         {
             Text = text, ForeColor = SidebarText, Font = new Font("Segoe UI", 10.5F),
-            AutoSize = false, Location = new Point(22, 0), Size = new Size(194, 44),
+            AutoSize = false, Location = new Point(22, 0), Size = new Size(214, 44),
             TextAlign = ContentAlignment.MiddleLeft, BackColor = Color.Transparent
         };
 
@@ -214,7 +215,7 @@ internal sealed class MainForm : Form
 
         AddPageTitle(page, S("General.Title"));
 
-        var card1 = MakeCard(page, 28, 56, 600, 296, S("General.Device"));
+        var card1 = MakeCard(page, 28, 64, 720, 320, S("General.Device"));
         var y = 44;
         y = AddField(card1, S("General.DeviceName"), _deviceName, y);
         y = AddField(card1, S("General.BindHost"), _bindHost, y);
@@ -226,33 +227,33 @@ internal sealed class MainForm : Form
         card1.Controls.Add(new Label
         {
             Text = S("General.Language"), Location = new Point(20, y + 4),
-            Size = new Size(130, 20), ForeColor = TextBody
+            Size = new Size(160, 22), ForeColor = TextBody
         });
         foreach (var lang in Strings.AvailableLanguages)
         {
             _langCombo.Items.Add(Strings.GetDisplayName(lang));
             _haLangCombo.Items.Add(Strings.GetDisplayName(lang));
         }
-        _langCombo.Location = new Point(150, y);
-        _langCombo.Size = new Size(160, 26);
+        _langCombo.Location = new Point(188, y);
+        _langCombo.Size = new Size(180, 28);
         card1.Controls.Add(_langCombo);
         y += 34;
 
         card1.Controls.Add(new Label
         {
             Text = S("General.HaLanguage"), Location = new Point(20, y + 4),
-            Size = new Size(130, 20), ForeColor = TextBody
+            Size = new Size(160, 22), ForeColor = TextBody
         });
-        _haLangCombo.Location = new Point(150, y);
-        _haLangCombo.Size = new Size(160, 26);
+        _haLangCombo.Location = new Point(188, y);
+        _haLangCombo.Size = new Size(180, 28);
         card1.Controls.Add(_haLangCombo);
 
-        var card2 = MakeCard(page, 28, 364, 600, 138, S("General.Network"));
+        var card2 = MakeCard(page, 28, 404, 720, 150, S("General.Network"));
         var urls = string.Join(Environment.NewLine, NetworkInfo.GetLanUrls(_settings.Port));
         var urlBox = new TextBox
         {
             Text = urls, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
-            Location = new Point(20, 44), Size = new Size(400, 48),
+            Location = new Point(20, 44), Size = new Size(540, 52),
             BackColor = PageBg, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 9F)
         };
         card2.Controls.Add(urlBox);
@@ -261,16 +262,16 @@ internal sealed class MainForm : Form
         copyBtn.Click += (_, _) => Clipboard.SetText(NetworkInfo.GetPreferredLanUrl(_settings.Port));
         card2.Controls.Add(copyBtn);
 
-        var card3 = MakeCard(page, 28, 514, 600, 108, S("General.Files"));
+        var card3 = MakeCard(page, 28, 574, 720, 120, S("General.Files"));
         card3.Controls.Add(new Label
         {
             Text = $"{S("General.Settings")}: {_paths.SettingsFile}", Location = new Point(20, 42),
-            Size = new Size(540, 18), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
+            Size = new Size(660, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
         });
         card3.Controls.Add(new Label
         {
             Text = $"{S("General.Log")}: {_paths.LogFile}", Location = new Point(20, 60),
-            Size = new Size(540, 18), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
+            Size = new Size(660, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
         });
         var openBtn = MakeSecondaryButton(S("General.OpenFolder"), 140, 28);
         openBtn.Location = new Point(20, 82);
@@ -703,7 +704,7 @@ internal sealed class MainForm : Form
         var page = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, AutoScroll = true, Visible = false };
         page.Layout += (_, _) =>
         {
-            var w = Math.Min(page.ClientSize.Width - 56, 750);
+            var w = Math.Min(page.ClientSize.Width - 56, 860);
             foreach (Control c in page.Controls)
             {
                 if (c is Label) continue;
@@ -747,15 +748,15 @@ internal sealed class MainForm : Form
         return card;
     }
 
-    private int AddField(Panel card, string label, Control input, int y, int labelWidth = 130, int inputWidth = 280)
+    private int AddField(Panel card, string label, Control input, int y, int labelWidth = 160, int inputWidth = 340)
     {
         card.Controls.Add(new Label
         {
             Text = label, Location = new Point(20, y + 4),
-            Size = new Size(labelWidth, 20), ForeColor = TextBody
+            Size = new Size(labelWidth, 22), ForeColor = TextBody
         });
-        input.Location = new Point(20 + labelWidth, y);
-        input.Size = new Size(inputWidth, 26);
+        input.Location = new Point(28 + labelWidth, y);
+        input.Size = new Size(inputWidth, 28);
         card.Controls.Add(input);
         return y + 34;
     }
@@ -764,7 +765,7 @@ internal sealed class MainForm : Form
     {
         cb.Text = text;
         cb.Location = new Point(20, y);
-        cb.Size = new Size(420, 24);
+        cb.Size = new Size(Math.Max(420, card.ClientSize.Width - 40), 26);
         cb.ForeColor = TextBody;
         card.Controls.Add(cb);
         return y + 30;

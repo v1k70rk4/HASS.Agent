@@ -25,9 +25,10 @@ internal sealed class CustomSensorsForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = false;
-        ClientSize = new Size(820, 480);
-        MinimumSize = new Size(760, 420);
         Font = new Font("Segoe UI", 9F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(920, 560);
+        MinimumSize = new Size(820, 480);
 
         BuildForm();
         LoadValues();
