@@ -31,11 +31,30 @@ RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "hungarian"; MessagesFile: "compiler:Languages\Hungarian.isl"
+
+[CustomMessages]
+english.TaskAutostart=Start automatically on login
+english.TaskGroupStartup=Startup:
+english.TaskInstallService=Install and start the optional system service
+english.TaskGroupOptional=Optional components:
+english.TaskCleanInstall=Clean install (remove existing settings, API key, and log files)
+english.TaskGroupAdvanced=Advanced:
+english.StatusFirewall=Configuring firewall...
+
+hungarian.TaskAutostart=Automatikus ind%u00edt%u00e1s bejelentkez%u00e9skor
+hungarian.TaskGroupStartup=Ind%u00edt%u00e1s:
+hungarian.TaskInstallService=Opcion%u00e1lis rendszerszolg%u00e1ltat%u00e1s telep%u00edt%u00e9se %u00e9s ind%u00edt%u00e1sa
+hungarian.TaskGroupOptional=Opcion%u00e1lis %u00f6sszetev%u0151k:
+hungarian.TaskCleanInstall=Tiszta telep%u00edt%u00e9s (megl%u00e9v%u0151 be%u00e1ll%u00edt%u00e1sok, API kulcs %u00e9s napl%u00f3f%u00e1jlok t%u00f6rl%u00e9se)
+hungarian.TaskGroupAdvanced=Halad%u00f3:
+hungarian.StatusFirewall=T%u0171zfal be%u00e1ll%u00edt%u00e1sa...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart"; Description: "Start automatically on login"; GroupDescription: "Startup:"
-Name: "installservice"; Description: "Install and start the optional system service"; GroupDescription: "Optional components:"; Flags: unchecked
+Name: "autostart"; Description: "{cm:TaskAutostart}"; GroupDescription: "{cm:TaskGroupStartup}"
+Name: "installservice"; Description: "{cm:TaskInstallService}"; GroupDescription: "{cm:TaskGroupOptional}"; Flags: unchecked
+Name: "cleaninstall"; Description: "{cm:TaskCleanInstall}"; GroupDescription: "{cm:TaskGroupAdvanced}"; Flags: unchecked
 
 [Files]
 Source: "..\artifacts\HASS.Agent.NET10\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -50,9 +69,14 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "HASS.Agent.NET10"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
 
+[Run]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName} Local API"""; Flags: runhidden waituntilterminated; StatusMsg: "{cm:StatusFirewall}"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName} Local API"" dir=in action=allow protocol=TCP localport=5115 profile=private program=""{app}\{#MyAppExeName}"" enable=yes"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:StatusFirewall}"
+
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--stop-service --quiet"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--uninstall-service --quiet"; Flags: runhidden waituntilterminated skipifdoesntexist
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName} Local API"""; Flags: runhidden waituntilterminated
 
 [Code]
 var
@@ -126,6 +150,11 @@ begin
     begin
       StopInstalledService();
       Sleep(1500);
+    end;
+
+    if WizardIsTaskSelected('cleaninstall') then
+    begin
+      DelTree(ExpandConstant('{commonappdata}\HASS.Agent.NET10'), True, True, True);
     end;
   end;
 
