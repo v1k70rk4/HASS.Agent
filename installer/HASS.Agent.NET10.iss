@@ -167,9 +167,6 @@ begin
       RunHidden(ExpandConstant('{app}\{#MyAppExeName}'), '--install-service --quiet');
     end;
 
-    if TrayWasRunning then
-    begin
-      Exec(ExpandConstant('{app}\{#MyAppExeName}'), '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
-    end;
+    Exec(ExpandConstant('{app}\{#MyAppExeName}'), '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
   end;
 end;
