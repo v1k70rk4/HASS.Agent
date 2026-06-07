@@ -67,7 +67,7 @@ internal static partial class Strings
             ["Cap.FastSensorInterval"] = "Gyors szenzorok",
             ["Cap.NormalSensorInterval"] = "Normál szenzorok",
             ["Cap.HourlySensorInterval"] = "Órás szenzorok",
-            ["Cap.Seconds"] = "másodperc",
+            ["Cap.Seconds"] = "mp",
             ["Cap.Commands"] = "Rendszerparancsok",
             ["Cap.WindowTitle"] = "képességek",
             ["Cap.Heading"] = "Mi kezelje és mit hirdessen a Home Assistant felé?",

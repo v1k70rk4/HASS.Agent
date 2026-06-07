@@ -506,17 +506,17 @@ internal sealed class MainForm : Form
         y = AddField(card1, S("Cap.FastSensorInterval"), _fastSensorInterval, y, inputWidth: 100);
         card1.Controls.Add(new Label
         {
-            Text = S("Cap.Seconds"), Location = Pt(260, y - 30), AutoSize = true, ForeColor = TextMuted
+            Text = S("Cap.Seconds"), Location = Pt(296, y - 30), AutoSize = true, ForeColor = TextMuted
         });
         y = AddField(card1, S("Cap.NormalSensorInterval"), _normalSensorInterval, y, inputWidth: 100);
         card1.Controls.Add(new Label
         {
-            Text = S("Cap.Seconds"), Location = Pt(260, y - 30), AutoSize = true, ForeColor = TextMuted
+            Text = S("Cap.Seconds"), Location = Pt(296, y - 30), AutoSize = true, ForeColor = TextMuted
         });
         y = AddField(card1, S("Cap.HourlySensorInterval"), _hourlySensorInterval, y, inputWidth: 100);
         card1.Controls.Add(new Label
         {
-            Text = S("Cap.Seconds"), Location = Pt(260, y - 30), AutoSize = true, ForeColor = TextMuted
+            Text = S("Cap.Seconds"), Location = Pt(296, y - 30), AutoSize = true, ForeColor = TextMuted
         });
 
         var cmdY = 368;

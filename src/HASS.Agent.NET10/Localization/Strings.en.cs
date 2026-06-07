@@ -67,7 +67,7 @@ internal static partial class Strings
             ["Cap.FastSensorInterval"] = "Fast sensors",
             ["Cap.NormalSensorInterval"] = "Normal sensors",
             ["Cap.HourlySensorInterval"] = "Hourly sensors",
-            ["Cap.Seconds"] = "seconds",
+            ["Cap.Seconds"] = "s",
             ["Cap.Commands"] = "System commands",
             ["Cap.WindowTitle"] = "capabilities",
             ["Cap.Heading"] = "What should handle and advertise features to Home Assistant?",
