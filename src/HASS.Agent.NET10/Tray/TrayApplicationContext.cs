@@ -20,6 +20,7 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
     private readonly NotifyIcon _notifyIcon;
     private readonly List<ActionNotificationForm> _actionNotifications = [];
     private string? _pendingNotificationAction;
+    private Action? _pendingBalloonAction;
     private MainForm? _mainForm;
 
     public event EventHandler<NotificationActionRequestedEventArgs>? NotificationActionRequested;
@@ -42,7 +43,29 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
         };
 
         _notifyIcon.DoubleClick += (_, _) => OpenMainForm();
-        _notifyIcon.BalloonTipClicked += (_, _) => PublishPendingNotificationAction();
+        _notifyIcon.BalloonTipClicked += (_, _) =>
+        {
+            if (_pendingBalloonAction is not null)
+            {
+                var action = _pendingBalloonAction;
+                _pendingBalloonAction = null;
+                action();
+            }
+            else
+            {
+                PublishPendingNotificationAction();
+            }
+        };
+    }
+
+    public void ShowMqttSetupRequired()
+    {
+        _pendingBalloonAction = () => OpenMainForm(1);
+        _notifyIcon.ShowBalloonTip(
+            10_000,
+            AppIdentity.DisplayName,
+            Strings.Get("Msg.MqttNotEnabled"),
+            ToolTipIcon.Warning);
     }
 
     public void ShowStartupError(Exception exception)
@@ -121,16 +144,17 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
         return serviceMenu;
     }
 
-    private void OpenMainForm()
+    private void OpenMainForm(int page = 0)
     {
         if (_mainForm is not null && !_mainForm.IsDisposed)
         {
+            _mainForm.NavigateToPage(page);
             _mainForm.BringToFront();
             _mainForm.Activate();
             return;
         }
 
-        _mainForm = new MainForm(_settings, _paths, _log);
+        _mainForm = new MainForm(_settings, _paths, _log, page);
         _mainForm.SettingsSaved += (_, _) => SettingsSaved?.Invoke(this, EventArgs.Empty);
         _mainForm.FormClosed += (_, _) => _mainForm = null;
         _mainForm.Show();

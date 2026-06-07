@@ -105,6 +105,7 @@ internal static partial class Strings
             // Messages
             ["Msg.SettingsSaved"] = "Beállítások mentve.",
             ["Msg.RestartRequired"] = "A nyelv megváltoztatásához indítsd újra az alkalmazást.",
+            ["Msg.MqttNotEnabled"] = "Az MQTT nincs engedélyezve. Kattints ide a beállításhoz.",
 
             // Tray
             ["Tray.Open"] = "Megnyitás",

@@ -152,6 +152,11 @@ internal static class Program
 
         mqttService.Start();
 
+        if (!settings.MqttEnabled)
+        {
+            trayContext.ShowMqttSetupRequired();
+        }
+
         if (settings.ShowStartupNotification)
         {
             trayContext.ShowNotification(new NotificationPayload

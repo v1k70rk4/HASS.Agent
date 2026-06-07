@@ -105,6 +105,7 @@ internal static partial class Strings
             // Messages
             ["Msg.SettingsSaved"] = "Settings saved.",
             ["Msg.RestartRequired"] = "Please restart the application to apply the language change.",
+            ["Msg.MqttNotEnabled"] = "MQTT is not enabled. Click here to configure.",
 
             // Tray
             ["Tray.Open"] = "Open",

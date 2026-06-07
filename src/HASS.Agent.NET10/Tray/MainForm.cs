@@ -66,7 +66,7 @@ internal sealed class MainForm : Form
 
     public event EventHandler? SettingsSaved;
 
-    public MainForm(CompanionSettings settings, AppPaths paths, FileLog log)
+    public MainForm(CompanionSettings settings, AppPaths paths, FileLog log, int initialPage = 0)
     {
         _settings = settings;
         _paths = paths;
@@ -100,8 +100,10 @@ internal sealed class MainForm : Form
         _content.Controls.Add(BuildAboutPage());
 
         LoadSettings();
-        SelectPage(0);
+        SelectPage(initialPage);
     }
+
+    public void NavigateToPage(int index) => SelectPage(index);
 
     // ── DPI helpers ────────────────────────────────────────────────
     // All layout values in this file are authored at 96 DPI (100%).
