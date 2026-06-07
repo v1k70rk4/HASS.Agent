@@ -13,7 +13,7 @@ https://github.com/v1k70rk4/HASS.Agent/issues
 
 The Home Assistant integration lives here:
 
-https://github.com/v1k70rk4/HASS.Agent-Integration
+https://github.com/v1k70rk4/HASS.Agent.NET10-Integration
 
 When in doubt, no worries - just go ahead and create the ticket.
 
