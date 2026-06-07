@@ -1,4 +1,4 @@
-#ifndef MyAppVersion
+﻿#ifndef MyAppVersion
 #define MyAppVersion "10.0.0"
 #endif
 
@@ -42,13 +42,13 @@ english.TaskCleanInstall=Clean install (remove existing settings, API key, and l
 english.TaskGroupAdvanced=Advanced:
 english.StatusFirewall=Configuring firewall...
 
-hungarian.TaskAutostart=Automatikus ind%u00edt%u00e1s bejelentkez%u00e9skor
-hungarian.TaskGroupStartup=Ind%u00edt%u00e1s:
-hungarian.TaskInstallService=Opcion%u00e1lis rendszerszolg%u00e1ltat%u00e1s telep%u00edt%u00e9se %u00e9s ind%u00edt%u00e1sa
-hungarian.TaskGroupOptional=Opcion%u00e1lis %u00f6sszetev%u0151k:
-hungarian.TaskCleanInstall=Tiszta telep%u00edt%u00e9s (megl%u00e9v%u0151 be%u00e1ll%u00edt%u00e1sok, API kulcs %u00e9s napl%u00f3f%u00e1jlok t%u00f6rl%u00e9se)
-hungarian.TaskGroupAdvanced=Halad%u00f3:
-hungarian.StatusFirewall=T%u0171zfal be%u00e1ll%u00edt%u00e1sa...
+hungarian.TaskAutostart=Automatikus indítás bejelentkezéskor
+hungarian.TaskGroupStartup=Indítás:
+hungarian.TaskInstallService=Opcionális rendszerszolgáltatás telepítése és indítása
+hungarian.TaskGroupOptional=Opcionális összetevők:
+hungarian.TaskCleanInstall=Tiszta telepítés (meglévő beállítások, API kulcs és naplófájlok törlése)
+hungarian.TaskGroupAdvanced=Haladó:
+hungarian.StatusFirewall=Tűzfal beállítása...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
