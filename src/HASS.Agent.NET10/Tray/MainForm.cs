@@ -75,14 +75,13 @@ internal sealed class MainForm : Form
         Text = AppIdentity.DisplayName;
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9.5F);
-        AutoScaleDimensions = new SizeF(96F, 96F);
-        AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(900, 600);
-        MinimumSize = new Size(700, 480);
+        AutoScaleMode = AutoScaleMode.None;
+        ClientSize = Sz(900, 600);
+        MinimumSize = Sz(700, 480);
         BackColor = PageBg;
         Icon = LoadIcon();
 
-        var sidebar = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = SidebarBg };
+        var sidebar = new Panel { Dock = DockStyle.Left, Width = D(200), BackColor = SidebarBg };
         BuildSidebar(sidebar);
 
         var bottomBar = BuildBottomBar();
@@ -104,7 +103,14 @@ internal sealed class MainForm : Form
         SelectPage(0);
     }
 
-    private int Dpi(int value) => (int)(value * DeviceDpi / 96f);
+    // ── DPI helpers ────────────────────────────────────────────────
+    // All layout values in this file are authored at 96 DPI (100%).
+    // D() scales a single int, Pt()/Sz() scale a Point/Size.
+    // Font sizes are in points and are NOT scaled (points are DPI-independent).
+
+    private int D(int v) => (int)(v * DeviceDpi / 96f);
+    private Point Pt(int x, int y) => new(D(x), D(y));
+    private Size Sz(int w, int h) => new(D(w), D(h));
 
     protected override void OnLoad(EventArgs e)
     {
@@ -123,25 +129,27 @@ internal sealed class MainForm : Form
 
     private static string S(string key) => Strings.Get(key);
 
+    // ── Sidebar ────────────────────────────────────────────────────
+
     private void BuildSidebar(Panel sidebar)
     {
-        var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = SidebarBg };
+        var header = new Panel { Dock = DockStyle.Top, Height = D(72), BackColor = SidebarBg };
         header.Controls.Add(new Label
         {
             Text = ".NET 10", Font = new Font("Segoe UI", 9F), ForeColor = Accent,
-            Location = new Point(20, 46), AutoSize = true
+            Location = Pt(20, 46), AutoSize = true
         });
         header.Controls.Add(new Label
         {
             Text = "HASS.Agent", Font = new Font("Segoe UI", 15F, FontStyle.Bold),
-            ForeColor = SidebarTextActive, Location = new Point(20, 18), AutoSize = true
+            ForeColor = SidebarTextActive, Location = Pt(20, 18), AutoSize = true
         });
 
-        var sep = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(51, 65, 85) };
+        var sep = new Panel { Dock = DockStyle.Top, Height = D(1), BackColor = Color.FromArgb(51, 65, 85) };
 
         var version = new Label
         {
-            Text = $"v{_settings.SoftwareVersion}", Dock = DockStyle.Bottom, Height = 36,
+            Text = $"v{_settings.SoftwareVersion}", Dock = DockStyle.Bottom, Height = D(36),
             ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F), TextAlign = ContentAlignment.MiddleCenter
         };
 
@@ -158,12 +166,12 @@ internal sealed class MainForm : Form
 
     private Panel CreateNavItem(string text, int index)
     {
-        var item = new Panel { Location = new Point(0, 8 + index * 44), Size = new Size(200, 44), BackColor = SidebarBg, Cursor = Cursors.Hand };
-        var indicator = new Panel { Location = Point.Empty, Size = new Size(3, 44), BackColor = Color.Transparent };
+        var item = new Panel { Location = new Point(0, D(8 + index * 44)), Size = Sz(200, 44), BackColor = SidebarBg, Cursor = Cursors.Hand };
+        var indicator = new Panel { Location = Point.Empty, Size = Sz(3, 44), BackColor = Color.Transparent };
         var label = new Label
         {
             Text = text, ForeColor = SidebarText, Font = new Font("Segoe UI", 10.5F),
-            AutoSize = false, Location = new Point(22, 0), Size = new Size(174, 44),
+            AutoSize = false, Location = Pt(22, 0), Size = Sz(174, 44),
             TextAlign = ContentAlignment.MiddleLeft, BackColor = Color.Transparent
         };
 
@@ -203,9 +211,11 @@ internal sealed class MainForm : Form
             _pages[i].Visible = i == index;
     }
 
+    // ── Bottom bar ─────────────────────────────────────────────────
+
     private Panel BuildBottomBar()
     {
-        var bar = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = CardBg };
+        var bar = new Panel { Dock = DockStyle.Bottom, Height = D(56), BackColor = CardBg };
         bar.Paint += (_, e) => { using var p = new Pen(BorderClr); e.Graphics.DrawLine(p, 0, 0, bar.Width, 0); };
 
         var save = MakePrimaryButton(S("Btn.Save"), 110, 36);
@@ -217,8 +227,8 @@ internal sealed class MainForm : Form
 
         bar.Layout += (_, _) =>
         {
-            close.Location = new Point(bar.ClientSize.Width - close.Width - Dpi(20), Dpi(10));
-            save.Location = new Point(close.Left - save.Width - Dpi(10), Dpi(10));
+            close.Location = new Point(bar.ClientSize.Width - close.Width - D(20), D(10));
+            save.Location = new Point(close.Left - save.Width - D(10), D(10));
         };
         close.Click += (_, _) => Close();
 
@@ -226,6 +236,8 @@ internal sealed class MainForm : Form
         bar.Controls.Add(close);
         return bar;
     }
+
+    // ── Pages ──────────────────────────────────────────────────────
 
     private Panel BuildGeneralPage()
     {
@@ -244,26 +256,26 @@ internal sealed class MainForm : Form
 
         card1.Controls.Add(new Label
         {
-            Text = S("General.Language"), Location = new Point(20, y + 4),
-            Size = new Size(160, 22), ForeColor = TextBody
+            Text = S("General.Language"), Location = Pt(20, y + 4),
+            Size = Sz(160, 22), ForeColor = TextBody
         });
         foreach (var lang in Strings.AvailableLanguages)
         {
             _langCombo.Items.Add(Strings.GetDisplayName(lang));
             _haLangCombo.Items.Add(Strings.GetDisplayName(lang));
         }
-        _langCombo.Location = new Point(188, y);
-        _langCombo.Size = new Size(180, 28);
+        _langCombo.Location = Pt(188, y);
+        _langCombo.Size = Sz(180, 28);
         card1.Controls.Add(_langCombo);
         y += 34;
 
         card1.Controls.Add(new Label
         {
-            Text = S("General.HaLanguage"), Location = new Point(20, y + 4),
-            Size = new Size(160, 22), ForeColor = TextBody
+            Text = S("General.HaLanguage"), Location = Pt(20, y + 4),
+            Size = Sz(160, 22), ForeColor = TextBody
         });
-        _haLangCombo.Location = new Point(188, y);
-        _haLangCombo.Size = new Size(180, 28);
+        _haLangCombo.Location = Pt(188, y);
+        _haLangCombo.Size = Sz(180, 28);
         card1.Controls.Add(_haLangCombo);
 
         var card2 = MakeCard(page, 28, 404, 720, 150, S("General.Network"));
@@ -271,28 +283,28 @@ internal sealed class MainForm : Form
         var urlBox = new TextBox
         {
             Text = urls, ReadOnly = true, Multiline = true, ScrollBars = ScrollBars.Vertical,
-            Location = new Point(20, 44), Size = new Size(540, 52),
+            Location = Pt(20, 44), Size = Sz(540, 52),
             BackColor = PageBg, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 9F)
         };
         card2.Controls.Add(urlBox);
         var copyBtn = MakeSecondaryButton(S("General.CopyUrl"), 120, 30);
-        copyBtn.Location = new Point(20, 100);
+        copyBtn.Location = Pt(20, 100);
         copyBtn.Click += (_, _) => Clipboard.SetText(NetworkInfo.GetPreferredLanUrl(_settings.Port));
         card2.Controls.Add(copyBtn);
 
         var card3 = MakeCard(page, 28, 574, 720, 120, S("General.Files"));
         card3.Controls.Add(new Label
         {
-            Text = $"{S("General.Settings")}: {_paths.SettingsFile}", Location = new Point(20, 42),
-            Size = new Size(660, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
+            Text = $"{S("General.Settings")}: {_paths.SettingsFile}", Location = Pt(20, 42),
+            Size = Sz(660, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
         });
         card3.Controls.Add(new Label
         {
-            Text = $"{S("General.Log")}: {_paths.LogFile}", Location = new Point(20, 60),
-            Size = new Size(660, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
+            Text = $"{S("General.Log")}: {_paths.LogFile}", Location = Pt(20, 60),
+            Size = Sz(660, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
         });
         var openBtn = MakeSecondaryButton(S("General.OpenFolder"), 140, 28);
-        openBtn.Location = new Point(20, 82);
+        openBtn.Location = Pt(20, 82);
         openBtn.Click += (_, _) => OpenFolder(_paths.ConfigDirectory);
         card3.Controls.Add(openBtn);
 
@@ -336,38 +348,38 @@ internal sealed class MainForm : Form
         AddField(card1, S("Cap.SensorInterval"), _sensorInterval, y, inputWidth: 100);
         card1.Controls.Add(new Label
         {
-            Text = S("Cap.Seconds"), Location = new Point(260, y + 4), AutoSize = true, ForeColor = TextMuted
+            Text = S("Cap.Seconds"), Location = Pt(260, y + 4), AutoSize = true, ForeColor = TextMuted
         });
 
         var cmdY = 300;
         var card2 = MakeCard(page, 28, cmdY, 600, 50 + SystemCommandCatalog.Commands.Count * 30 + 16, S("Cap.Commands"));
         y = 44;
-        card2.Controls.Add(new Label { Text = "Tray", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = TextMuted, Location = new Point(320, y), AutoSize = true });
-        card2.Controls.Add(new Label { Text = "Service", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = TextMuted, Location = new Point(410, y), AutoSize = true });
+        card2.Controls.Add(new Label { Text = "Tray", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = TextMuted, Location = Pt(320, y), AutoSize = true });
+        card2.Controls.Add(new Label { Text = "Service", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = TextMuted, Location = Pt(410, y), AutoSize = true });
         y += 24;
 
         foreach (var cmd in SystemCommandCatalog.Commands)
         {
             card2.Controls.Add(new Label
             {
-                Text = S($"Cmd.{cmd.Name}"), Location = new Point(20, y + 2),
-                Size = new Size(280, 22), ForeColor = TextBody
+                Text = S($"Cmd.{cmd.Name}"), Location = Pt(20, y + 2),
+                Size = Sz(280, 22), ForeColor = TextBody
             });
 
-            var tray = new CheckBox { Location = new Point(324, y), AutoSize = true, Enabled = cmd.SupportsTrayApp };
+            var tray = new CheckBox { Location = Pt(324, y), AutoSize = true, Enabled = cmd.SupportsTrayApp };
             card2.Controls.Add(tray);
 
             CheckBox? service = null;
             if (cmd.SupportsService)
             {
-                service = new CheckBox { Location = new Point(418, y), AutoSize = true };
+                service = new CheckBox { Location = Pt(418, y), AutoSize = true };
                 card2.Controls.Add(service);
             }
             else
             {
                 card2.Controls.Add(new Label
                 {
-                    Text = "—", Location = new Point(420, y + 1), AutoSize = true, ForeColor = TextMuted
+                    Text = "—", Location = Pt(420, y + 1), AutoSize = true, ForeColor = TextMuted
                 });
             }
 
@@ -386,28 +398,28 @@ internal sealed class MainForm : Form
 
         var tabs = new TabControl
         {
-            Location = new Point(28, 56),
-            Size = new Size(600, 420),
+            Location = Pt(28, 56),
+            Size = Sz(600, 420),
             Font = new Font("Segoe UI", 9.5F)
         };
 
-        var builtInTab = new TabPage(S("Sensors.BuiltIn")) { BackColor = CardBg, Padding = new Padding(4) };
+        var builtInTab = new TabPage(S("Sensors.BuiltIn")) { BackColor = CardBg, Padding = new Padding(D(4)) };
         SetupBuiltInGrid();
         _builtInGrid.Dock = DockStyle.Fill;
         builtInTab.Controls.Add(_builtInGrid);
         tabs.TabPages.Add(builtInTab);
 
-        var customTab = new TabPage(S("Sensors.Custom")) { BackColor = CardBg, Padding = new Padding(4) };
+        var customTab = new TabPage(S("Sensors.Custom")) { BackColor = CardBg, Padding = new Padding(D(4)) };
         SetupCustomGrid();
         _customGrid.Dock = DockStyle.Fill;
 
-        var btnPanel = new Panel { Dock = DockStyle.Bottom, Height = 40, BackColor = CardBg };
+        var btnPanel = new Panel { Dock = DockStyle.Bottom, Height = D(40), BackColor = CardBg };
         var addBtn = MakeSecondaryButton(S("Sensors.Add"), 110, 30);
-        addBtn.Location = new Point(4, 6);
+        addBtn.Location = Pt(4, 6);
         addBtn.Click += (_, _) => _customGrid.Rows.Add(true, true, true, CustomSensorTypes.ProcessRunning, S("Sensors.NewSensor"), "notepad");
 
         var removeBtn = MakeSecondaryButton(S("Sensors.Remove"), 90, 30);
-        removeBtn.Location = new Point(122, 6);
+        removeBtn.Location = new Point(addBtn.Right + D(8), D(6));
         removeBtn.Click += (_, _) =>
         {
             if (_customGrid.CurrentRow is { IsNewRow: false } row)
@@ -427,37 +439,37 @@ internal sealed class MainForm : Form
     private void SetupBuiltInGrid()
     {
         StyleGrid(_builtInGrid);
-        _builtInGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "TrayApp", HeaderText = "Tray", Width = 50 });
-        _builtInGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Service", HeaderText = "Svc", Width = 50 });
+        _builtInGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "TrayApp", HeaderText = "Tray", Width = D(50) });
+        _builtInGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Service", HeaderText = "Svc", Width = D(50) });
         _builtInGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Name", HeaderText = S("Sensors.Sensor"), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-            MinimumWidth = 200, ReadOnly = true
+            MinimumWidth = D(200), ReadOnly = true
         });
     }
 
     private void SetupCustomGrid()
     {
         StyleGrid(_customGrid);
-        _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Enabled", HeaderText = S("Sensors.Active"), Width = 50 });
-        _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "TrayApp", HeaderText = "Tray", Width = 50 });
-        _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Service", HeaderText = "Svc", Width = 50 });
+        _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Enabled", HeaderText = S("Sensors.Active"), Width = D(50) });
+        _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "TrayApp", HeaderText = "Tray", Width = D(50) });
+        _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Service", HeaderText = "Svc", Width = D(50) });
         var sensorTypes = new[] { CustomSensorTypes.ProcessRunning, CustomSensorTypes.ServiceStatus, CustomSensorTypes.DiskFree }
             .Select(t => new { Key = t, Display = S($"SensorType.{t}") }).ToArray();
         _customGrid.Columns.Add(new DataGridViewComboBoxColumn
         {
-            Name = "Type", HeaderText = S("Sensors.Type"), Width = 150,
+            Name = "Type", HeaderText = S("Sensors.Type"), Width = D(150),
             DataSource = sensorTypes, ValueMember = "Key", DisplayMember = "Display"
         });
-        _customGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = S("Sensors.Name"), Width = 130 });
+        _customGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = S("Sensors.Name"), Width = D(130) });
         _customGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Parameter", HeaderText = S("Sensors.Parameter"),
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 80
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = D(80)
         });
     }
 
-    private static void StyleGrid(DataGridView grid)
+    private void StyleGrid(DataGridView grid)
     {
         grid.AllowUserToAddRows = false;
         grid.AllowUserToDeleteRows = false;
@@ -477,6 +489,7 @@ internal sealed class MainForm : Form
         grid.EnableHeadersVisualStyles = false;
         grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
         grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        grid.RowTemplate.Height = D(24);
     }
 
     private Panel BuildServicePage()
@@ -487,7 +500,7 @@ internal sealed class MainForm : Form
         var statusLabel = new Label
         {
             Text = CompanionServiceManager.GetStatusText(),
-            Location = new Point(20, 44), Size = new Size(540, 64),
+            Location = Pt(20, 44), Size = Sz(540, 64),
             ForeColor = TextBody, Font = new Font("Segoe UI", 9.5F)
         };
 
@@ -495,14 +508,14 @@ internal sealed class MainForm : Form
         card1.Controls.Add(statusLabel);
 
         var refreshBtn = MakeSecondaryButton(S("Service.Refresh"), 100, 30);
-        refreshBtn.Location = new Point(20, 116);
+        refreshBtn.Location = Pt(20, 116);
         refreshBtn.Click += (_, _) => statusLabel.Text = CompanionServiceManager.GetStatusText();
         card1.Controls.Add(refreshBtn);
 
         var card2 = MakeCard(page, 28, 228, 600, 140, S("Service.Actions"));
 
         var installBtn = MakePrimaryButton(S("Service.Install"), 170, 36);
-        installBtn.Location = new Point(20, 48);
+        installBtn.Location = Pt(20, 48);
         installBtn.Click += (_, _) =>
         {
             CompanionServiceManager.RunElevated("--install-service", _log);
@@ -511,7 +524,7 @@ internal sealed class MainForm : Form
         card2.Controls.Add(installBtn);
 
         var startBtn = MakeSecondaryButton(S("Service.Start"), 100, 36);
-        startBtn.Location = new Point(200, 48);
+        startBtn.Location = Pt(200, 48);
         startBtn.Click += (_, _) =>
         {
             CompanionServiceManager.RunElevated("--start-service", _log);
@@ -520,7 +533,7 @@ internal sealed class MainForm : Form
         card2.Controls.Add(startBtn);
 
         var stopBtn = MakeSecondaryButton(S("Service.Stop"), 100, 36);
-        stopBtn.Location = new Point(310, 48);
+        stopBtn.Location = Pt(310, 48);
         stopBtn.Click += (_, _) =>
         {
             CompanionServiceManager.RunElevated("--stop-service", _log);
@@ -529,7 +542,7 @@ internal sealed class MainForm : Form
         card2.Controls.Add(stopBtn);
 
         var uninstallBtn = MakeSecondaryButton(S("Service.Uninstall"), 110, 36);
-        uninstallBtn.Location = new Point(20, 96);
+        uninstallBtn.Location = Pt(20, 96);
         uninstallBtn.ForeColor = Color.FromArgb(185, 28, 28);
         uninstallBtn.Click += (_, _) =>
         {
@@ -554,27 +567,27 @@ internal sealed class MainForm : Form
         card.Controls.Add(new Label
         {
             Text = AppIdentity.DisplayName, Font = new Font("Segoe UI", 18F, FontStyle.Bold),
-            ForeColor = TextDark, Location = new Point(28, 24), AutoSize = true
+            ForeColor = TextDark, Location = Pt(28, 24), AutoSize = true
         });
         card.Controls.Add(new Label
         {
             Text = $"{S("About.Version")}: {_settings.SoftwareVersion}",
-            ForeColor = TextBody, Location = new Point(28, 62), AutoSize = true
+            ForeColor = TextBody, Location = Pt(28, 62), AutoSize = true
         });
         card.Controls.Add(new Label
         {
             Text = $"{S("About.Developer")}: {_settings.Manufacturer}",
-            ForeColor = TextBody, Location = new Point(28, 86), AutoSize = true
+            ForeColor = TextBody, Location = Pt(28, 86), AutoSize = true
         });
         card.Controls.Add(new Label
         {
             Text = S("About.Description"),
-            ForeColor = TextMuted, Location = new Point(28, 120), AutoSize = true
+            ForeColor = TextMuted, Location = Pt(28, 120), AutoSize = true
         });
 
         var ghLink = new LinkLabel
         {
-            Text = "GitHub", Location = new Point(28, 152), AutoSize = true,
+            Text = "GitHub", Location = Pt(28, 152), AutoSize = true,
             LinkColor = BtnBlue, ActiveLinkColor = BtnBlueHover
         };
         ghLink.LinkClicked += (_, _) =>
@@ -586,6 +599,8 @@ internal sealed class MainForm : Form
 
         return page;
     }
+
+    // ── Settings load / save ───────────────────────────────────────
 
     private void LoadSettings()
     {
@@ -717,15 +732,19 @@ internal sealed class MainForm : Form
         MessageBox.Show(msg, AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    // ── Layout helpers ─────────────────────────────────────────────
+    // Card/field y-values are in LOGICAL pixels (96 DPI).
+    // The helpers convert to device pixels internally.
+
     private Panel MakePage()
     {
         var page = new Panel { Dock = DockStyle.Fill, BackColor = PageBg, AutoScroll = true, Visible = false };
         page.Layout += (_, _) =>
         {
-            var padding = Dpi(56);
-            var maxWidth = Dpi(860);
+            var padding = D(56);
+            var maxWidth = D(860);
             var w = Math.Min(page.ClientSize.Width - padding, maxWidth);
-            if (w < Dpi(400)) w = page.ClientSize.Width - padding;
+            if (w < D(400)) w = page.ClientSize.Width - padding;
             foreach (Control c in page.Controls)
             {
                 if (c is Label) continue;
@@ -736,20 +755,21 @@ internal sealed class MainForm : Form
         return page;
     }
 
-    private static void AddPageTitle(Panel page, string text)
+    private void AddPageTitle(Panel page, string text)
     {
         page.Controls.Add(new Label
         {
             Text = text, Font = new Font("Segoe UI", 16F, FontStyle.Bold),
-            ForeColor = TextDark, Location = new Point(28, 16), AutoSize = true
+            ForeColor = TextDark, Location = Pt(28, 16), AutoSize = true
         });
     }
 
+    /// <summary>All parameters are in logical (96 DPI) pixels.</summary>
     private Panel MakeCard(Panel page, int x, int y, int width, int height, string? title)
     {
         var card = new Panel
         {
-            Location = new Point(x, y), Size = new Size(width, height),
+            Location = Pt(x, y), Size = Sz(width, height),
             BackColor = CardBg
         };
         card.Paint += (_, e) =>
@@ -762,41 +782,44 @@ internal sealed class MainForm : Form
             card.Controls.Add(new Label
             {
                 Text = title, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-                ForeColor = TextDark, Location = new Point(20, 14), AutoSize = true
+                ForeColor = TextDark, Location = Pt(20, 14), AutoSize = true
             });
         }
         page.Controls.Add(card);
         return card;
     }
 
+    /// <summary>y is logical. Returns the next logical y.</summary>
     private int AddField(Panel card, string label, Control input, int y, int labelWidth = 160, int inputWidth = 340)
     {
         card.Controls.Add(new Label
         {
-            Text = label, Location = new Point(20, y + 4),
-            Size = new Size(labelWidth, 22), ForeColor = TextBody
+            Text = label, Location = Pt(20, y + 4),
+            Size = Sz(labelWidth, 22), ForeColor = TextBody
         });
-        input.Location = new Point(28 + labelWidth, y);
-        input.Size = new Size(inputWidth, 28);
+        input.Location = Pt(28 + labelWidth, y);
+        input.Size = Sz(inputWidth, 28);
         card.Controls.Add(input);
         return y + 34;
     }
 
-    private static int AddCheck(Panel card, CheckBox cb, string text, int y)
+    /// <summary>y is logical. Returns the next logical y.</summary>
+    private int AddCheck(Panel card, CheckBox cb, string text, int y)
     {
         cb.Text = text;
-        cb.Location = new Point(20, y);
-        cb.Size = new Size(Math.Max(420, card.ClientSize.Width - 40), 26);
+        cb.Location = Pt(20, y);
+        cb.Size = new Size(Math.Max(D(420), card.ClientSize.Width - D(40)), D(26));
         cb.ForeColor = TextBody;
         card.Controls.Add(cb);
         return y + 30;
     }
 
-    private static Button MakePrimaryButton(string text, int w, int h)
+    /// <summary>w and h are logical (96 DPI) pixels.</summary>
+    private Button MakePrimaryButton(string text, int w, int h)
     {
         var btn = new Button
         {
-            Text = text, Size = new Size(w, h), FlatStyle = FlatStyle.Flat,
+            Text = text, Size = Sz(w, h), FlatStyle = FlatStyle.Flat,
             BackColor = BtnBlue, ForeColor = Color.White, Cursor = Cursors.Hand,
             Font = new Font("Segoe UI", 9.5F, FontStyle.Bold)
         };
@@ -805,11 +828,12 @@ internal sealed class MainForm : Form
         return btn;
     }
 
-    private static Button MakeSecondaryButton(string text, int w, int h)
+    /// <summary>w and h are logical (96 DPI) pixels.</summary>
+    private Button MakeSecondaryButton(string text, int w, int h)
     {
         var btn = new Button
         {
-            Text = text, Size = new Size(w, h), FlatStyle = FlatStyle.Flat,
+            Text = text, Size = Sz(w, h), FlatStyle = FlatStyle.Flat,
             BackColor = CardBg, ForeColor = TextBody, Cursor = Cursors.Hand,
             Font = new Font("Segoe UI", 9F)
         };
