@@ -50,6 +50,7 @@ internal static partial class Strings
             ["Mqtt.ButtonsByRoles"] = "Buttons over MQTT (based on roles)",
             ["Mqtt.SystemSensors"] = "System sensors over MQTT",
             ["Mqtt.HostRequired"] = "Broker address cannot be empty.",
+            ["Mqtt.NotConfigured"] = "MQTT is not configured. Home Assistant integration will not work.",
 
             // Capabilities page
             ["Cap.Title"] = "Capabilities",

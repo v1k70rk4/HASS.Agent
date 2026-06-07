@@ -106,6 +106,13 @@ internal static class Program
         Localization.Strings.HaLanguage = settings.HaLanguage;
         try
         {
+            if (!settings.AutoStartOnLogin && StartupManager.IsEnabled())
+            {
+                settings.AutoStartOnLogin = true;
+                SettingsStore.Save(paths, settings);
+                log.Info("Adopted auto-start setting from registry (installer).");
+            }
+
             StartupManager.SetEnabled(settings.AutoStartOnLogin);
         }
         catch (Exception ex)

@@ -34,6 +34,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "autostart"; Description: "Start automatically on login"; GroupDescription: "Startup:"
 Name: "installservice"; Description: "Install and start the optional system service"; GroupDescription: "Optional components:"; Flags: unchecked
 
 [Files]
@@ -46,8 +47,8 @@ Name: "{commonappdata}\HASS.Agent.NET10"; Permissions: authusers-modify
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
-[Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Check: ShouldOfferLaunch
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "HASS.Agent.NET10"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--stop-service --quiet"; Flags: runhidden waituntilterminated skipifdoesntexist
@@ -85,11 +86,6 @@ begin
     ewWaitUntilTerminated,
     ResultCode);
   Result := ResultCode = 0;
-end;
-
-function ShouldOfferLaunch(): Boolean;
-begin
-  Result := not TrayWasRunning;
 end;
 
 procedure EnsureConfigDirectoryPermissions();

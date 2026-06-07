@@ -50,6 +50,7 @@ internal static partial class Strings
             ["Mqtt.ButtonsByRoles"] = "Gombok MQTT-n (szerepkörök alapján)",
             ["Mqtt.SystemSensors"] = "Gépállapot szenzorok MQTT-n",
             ["Mqtt.HostRequired"] = "A broker cím nem lehet üres.",
+            ["Mqtt.NotConfigured"] = "Az MQTT nincs beállítva. A Home Assistant integráció nem fog működni.",
 
             // Capabilities page
             ["Cap.Title"] = "Képességek",

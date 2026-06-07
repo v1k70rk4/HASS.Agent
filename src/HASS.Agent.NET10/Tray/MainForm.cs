@@ -47,6 +47,7 @@ internal sealed class MainForm : Form
     private readonly ComboBox _haLangCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
 
     private readonly CheckBox _mqttEnabled = new();
+    private readonly Label _mqttWarning = new();
     private readonly TextBox _mqttHost = new();
     private readonly NumericUpDown _mqttPort = new() { Minimum = 1, Maximum = 65535 };
     private readonly TextBox _mqttUser = new();
@@ -319,9 +320,27 @@ internal sealed class MainForm : Form
 
         AddPageTitle(page, S("Mqtt.Title"));
 
-        var card = MakeCard(page, 28, 56, 600, 308, S("Mqtt.Connection"));
+        _mqttWarning.Text = "⚠  " + S("Mqtt.NotConfigured");
+        _mqttWarning.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+        _mqttWarning.ForeColor = Color.FromArgb(180, 60, 0);
+        _mqttWarning.BackColor = Color.FromArgb(255, 243, 224);
+        _mqttWarning.AutoSize = false;
+        _mqttWarning.Location = Pt(28, 56);
+        _mqttWarning.Size = Sz(600, 32);
+        _mqttWarning.TextAlign = ContentAlignment.MiddleLeft;
+        _mqttWarning.Padding = new Padding(D(10), 0, 0, 0);
+        _mqttWarning.Visible = !_settings.MqttEnabled;
+        page.Controls.Add(_mqttWarning);
+
+        var cardTop = _settings.MqttEnabled ? 56 : 96;
+        var card = MakeCard(page, 28, cardTop, 600, 308, S("Mqtt.Connection"));
         var y = 44;
         y = AddCheck(card, _mqttEnabled, S("Mqtt.Enable"), y);
+        _mqttEnabled.CheckedChanged += (_, _) =>
+        {
+            _mqttWarning.Visible = !_mqttEnabled.Checked;
+            card.Location = Pt(28, _mqttEnabled.Checked ? 56 : 96);
+        };
         y += 6;
         y = AddField(card, S("Mqtt.BrokerHost"), _mqttHost, y);
         y = AddField(card, S("Mqtt.Port"), _mqttPort, y, inputWidth: 120);
