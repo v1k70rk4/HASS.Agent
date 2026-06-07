@@ -169,6 +169,8 @@ internal sealed class MediaSessionService : IDisposable
         }
     }
 
+    public Task<MediaStateMessage> GetCurrentStateAsync() => BuildStateMessageAsync();
+
     public void Dispose()
     {
         StopAsync().GetAwaiter().GetResult();
