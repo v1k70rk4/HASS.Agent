@@ -28,12 +28,16 @@ internal static partial class Strings
             ["General.ShowStartup"] = "Értesítés megjelenítése induláskor",
             ["General.Network"] = "Hálózat",
             ["General.CopyUrl"] = "URL másolása",
+            ["General.ApiKey"] = "API kulcs",
+            ["General.CopyApiKey"] = "Másolás",
             ["General.Files"] = "Fájlok",
             ["General.Settings"] = "Beállítások",
             ["General.Log"] = "Napló",
             ["General.OpenFolder"] = "Mappa megnyitása",
             ["General.Language"] = "Program nyelv",
             ["General.HaLanguage"] = "HA entitás nyelv",
+            ["General.MqttDisabledError"] = "Az MQTT nincs beállítva. A Home Assistant integráció nem fog működni.",
+            ["General.ServiceNotInstalledWarning"] = "A Windows szolgáltatás nincs telepítve, ezért a service oldali parancsok és szenzorok nem fognak futni.",
 
             // MQTT page
             ["Mqtt.Title"] = "MQTT beállítások",
@@ -60,6 +64,9 @@ internal static partial class Strings
             ["Cap.SensorsService"] = "Rendszerszenzorok — szolgáltatás",
             ["Cap.SensorsApp"] = "Rendszerszenzorok — tray app",
             ["Cap.SensorInterval"] = "Szenzor frissítés",
+            ["Cap.FastSensorInterval"] = "Gyors szenzorok",
+            ["Cap.NormalSensorInterval"] = "Normál szenzorok",
+            ["Cap.HourlySensorInterval"] = "Órás szenzorok",
             ["Cap.Seconds"] = "másodperc",
             ["Cap.Commands"] = "Rendszerparancsok",
             ["Cap.WindowTitle"] = "képességek",
@@ -79,13 +86,28 @@ internal static partial class Strings
             ["Sensors.Type"] = "Típus",
             ["Sensors.Name"] = "Név",
             ["Sensors.Parameter"] = "Paraméter",
+            ["Sensors.Profile"] = "Profil",
+            ["Sensors.Value"] = "Érték",
             ["Sensors.Add"] = "Hozzáadás",
             ["Sensors.Remove"] = "Törlés",
+            ["Sensors.TestValue"] = "Teszt",
             ["Sensors.NewSensor"] = "Új szenzor",
             ["Sensors.WindowTitle"] = "szenzorok",
             ["Sensors.Basic"] = "Alap szenzorok",
             ["Sensors.CustomAdd"] = "Egyedi hozzáadás",
             ["Sensors.CustomRemove"] = "Egyedi törlés",
+            ["Sensors.MultiValueTooltip"] = "Ez a szenzor több értéket is ad. Kattints egy attribútum alapú egyedi szenzor hozzáadásához.",
+            ["Sensors.AttributeSensorName"] = "{0}: {1}",
+            ["Sensors.CustomHelp"] = "Paraméterek: process_running = processz név, service_status = Windows service név, disk_free = meghajtó betűjel/útvonal. Beépített attribútumhoz kattints a + ikonra; minden elérhető attribútum bekerül, listáknál [0] indexszel.",
+            ["Sensors.ValueLoading"] = "olvasás...",
+            ["Sensors.ValueNotTested"] = "nincs tesztelve",
+            ["Sensors.ValueMissingParameter"] = "hiányzó paraméter",
+            ["Sensors.ValueError"] = "hiba: {0}",
+
+            ["PollingProfile.fast"] = "Gyors",
+            ["PollingProfile.normal"] = "Normál",
+            ["PollingProfile.hourly"] = "Órás",
+            ["PollingProfile.startup"] = "Indításkor",
 
             // Service page
             ["Service.Title"] = "Szolgáltatás",
@@ -102,6 +124,15 @@ internal static partial class Strings
             ["About.Version"] = "Verzió",
             ["About.Developer"] = "Fejlesztő",
             ["About.Description"] = "Modern .NET 10 Windows kliens a Home Assistant integrációhoz.",
+            ["About.ReportIssue"] = "Hibabejelentés",
+            ["About.CheckUpdates"] = "Frissítés keresése",
+            ["About.CheckingUpdates"] = "Ellenőrzés...",
+            ["About.DownloadingUpdate"] = "Letöltés...",
+            ["About.NoUpdates"] = "Naprakész verziót használsz. Legfrissebb release: {0}.",
+            ["About.UpdateAvailable"] = "Elérhető egy újabb release: {0}\n\nTelepített verzió: {1}\n\nLetöltöd most?",
+            ["About.UpdateDownloaded"] = "A frissítés letöltve ide:\n{0}\n\nMegnyitod most?",
+            ["About.UpdateCheckFailed"] = "Nem sikerült lekérni a legfrissebb GitHub release-t.",
+            ["About.UpdateError"] = "Frissítés ellenőrzési hiba: {0}",
 
             // Messages
             ["Msg.SettingsSaved"] = "Beállítások mentve.",
@@ -110,6 +141,7 @@ internal static partial class Strings
 
             // Tray
             ["Tray.Open"] = "Megnyitás",
+            ["Tray.Service"] = "Rendszerszolgáltatás",
             ["Tray.CopyUrl"] = "URL másolása",
             ["Tray.Exit"] = "Kilépés",
             ["Tray.ServiceCommand"] = "System service parancs elindítva.",
@@ -190,6 +222,6 @@ internal static partial class Strings
             ["SensorType.process_running"] = "Futó folyamat",
             ["SensorType.service_status"] = "Szolgáltatás állapot",
             ["SensorType.disk_free"] = "Szabad lemezterület",
+            ["SensorType.built_in_attribute"] = "Beépített attribútum",
     };
 }
-

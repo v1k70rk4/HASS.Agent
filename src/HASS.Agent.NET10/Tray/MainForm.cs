@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 using HASS.Agent.Companion.Configuration;
 using HASS.Agent.Companion.Localization;
@@ -45,6 +46,14 @@ internal sealed class MainForm : Form
     private readonly CheckBox _showStartup = new();
     private readonly ComboBox _langCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _haLangCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Label _generalMqttError = new();
+    private readonly Label _generalServiceWarning = new();
+    private Control? _generalDeviceCard;
+    private Control? _generalNetworkCard;
+    private Control? _generalFilesCard;
+    private readonly Label _serviceWarning = new();
+    private Control? _serviceStatusCard;
+    private Control? _serviceActionsCard;
 
     private readonly CheckBox _mqttEnabled = new();
     private readonly Label _mqttWarning = new();
@@ -59,7 +68,9 @@ internal sealed class MainForm : Form
     private readonly CheckBox _capMedia = new();
     private readonly CheckBox _capSensorsService = new();
     private readonly CheckBox _capSensorsApp = new();
-    private readonly NumericUpDown _sensorInterval = new() { Minimum = 5, Maximum = 3600 };
+    private readonly NumericUpDown _fastSensorInterval = new() { Minimum = 10, Maximum = 3600 };
+    private readonly NumericUpDown _normalSensorInterval = new() { Minimum = 10, Maximum = 86400 };
+    private readonly NumericUpDown _hourlySensorInterval = new() { Minimum = 10, Maximum = 86400 };
     private readonly List<CmdRow> _cmdRows = [];
 
     private readonly DataGridView _builtInGrid = new();
@@ -248,7 +259,22 @@ internal sealed class MainForm : Form
 
         AddPageTitle(page, S("General.Title"));
 
+        ConfigureStatusLabel(
+            _generalMqttError,
+            "⚠  " + S("General.MqttDisabledError"),
+            Color.FromArgb(153, 27, 27),
+            Color.White);
+        ConfigureStatusLabel(
+            _generalServiceWarning,
+            "⚠  " + S("General.ServiceNotInstalledWarning"),
+            Color.FromArgb(255, 243, 224),
+            Color.FromArgb(180, 60, 0));
+        page.Controls.Add(_generalMqttError);
+        page.Controls.Add(_generalServiceWarning);
+        page.Layout += (_, _) => LayoutGeneralStatusMessages();
+
         var card1 = MakeCard(page, 28, 64, 720, 320, S("General.Device"));
+        _generalDeviceCard = card1;
         var y = 44;
         y = AddField(card1, S("General.DeviceName"), _deviceName, y);
         y = AddField(card1, S("General.BindHost"), _bindHost, y);
@@ -281,7 +307,8 @@ internal sealed class MainForm : Form
         _haLangCombo.Size = Sz(180, 28);
         card1.Controls.Add(_haLangCombo);
 
-        var card2 = MakeCard(page, 28, 404, 720, 150, S("General.Network"));
+        var card2 = MakeCard(page, 28, 404, 720, 194, S("General.Network"));
+        _generalNetworkCard = card2;
         var urls = string.Join(Environment.NewLine, NetworkInfo.GetLanUrls(_settings.Port));
         var urlBox = new TextBox
         {
@@ -295,7 +322,25 @@ internal sealed class MainForm : Form
         copyBtn.Click += (_, _) => Clipboard.SetText(NetworkInfo.GetPreferredLanUrl(_settings.Port));
         card2.Controls.Add(copyBtn);
 
-        var card3 = MakeCard(page, 28, 574, 720, 120, S("General.Files"));
+        card2.Controls.Add(new Label
+        {
+            Text = S("General.ApiKey"), Location = Pt(20, 140),
+            Size = Sz(80, 22), ForeColor = TextBody
+        });
+        var apiKeyBox = new TextBox
+        {
+            Text = _settings.ApiKey, ReadOnly = true,
+            Location = Pt(104, 136), Size = Sz(400, 28),
+            BackColor = PageBg, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Consolas", 9F)
+        };
+        card2.Controls.Add(apiKeyBox);
+        var copyKeyBtn = MakeSecondaryButton(S("General.CopyApiKey"), 100, 28);
+        copyKeyBtn.Location = Pt(512, 136);
+        copyKeyBtn.Click += (_, _) => Clipboard.SetText(_settings.ApiKey);
+        card2.Controls.Add(copyKeyBtn);
+
+        var card3 = MakeCard(page, 28, 618, 720, 120, S("General.Files"));
+        _generalFilesCard = card3;
         card3.Controls.Add(new Label
         {
             Text = $"{S("General.Settings")}: {_paths.SettingsFile}", Location = Pt(20, 42),
@@ -311,6 +356,7 @@ internal sealed class MainForm : Form
         openBtn.Click += (_, _) => OpenFolder(_paths.ConfigDirectory);
         card3.Controls.Add(openBtn);
 
+        UpdateGeneralStatusMessages();
         return page;
     }
 
@@ -320,15 +366,13 @@ internal sealed class MainForm : Form
 
         AddPageTitle(page, S("Mqtt.Title"));
 
-        _mqttWarning.Text = "⚠  " + S("Mqtt.NotConfigured");
-        _mqttWarning.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
-        _mqttWarning.ForeColor = Color.FromArgb(180, 60, 0);
-        _mqttWarning.BackColor = Color.FromArgb(255, 243, 224);
-        _mqttWarning.AutoSize = false;
+        ConfigureStatusLabel(
+            _mqttWarning,
+            "⚠  " + S("Mqtt.NotConfigured"),
+            Color.FromArgb(153, 27, 27),
+            Color.White);
         _mqttWarning.Location = Pt(28, 56);
-        _mqttWarning.Size = Sz(600, 32);
-        _mqttWarning.TextAlign = ContentAlignment.MiddleLeft;
-        _mqttWarning.Padding = new Padding(D(10), 0, 0, 0);
+        _mqttWarning.Size = Sz(600, 34);
         _mqttWarning.Visible = !_settings.MqttEnabled;
         page.Controls.Add(_mqttWarning);
 
@@ -353,26 +397,129 @@ internal sealed class MainForm : Form
         return page;
     }
 
+    private void ConfigureStatusLabel(Label label, string text, Color background, Color foreground)
+    {
+        label.Text = text;
+        label.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+        label.ForeColor = foreground;
+        label.BackColor = background;
+        label.BorderStyle = BorderStyle.None;
+        label.AutoSize = false;
+        label.TextAlign = ContentAlignment.MiddleLeft;
+        label.Padding = new Padding(D(12), 0, D(12), 0);
+    }
+
+    private void UpdateGeneralStatusMessages()
+    {
+        _generalMqttError.Visible = !_settings.MqttEnabled;
+        _generalServiceWarning.Visible = !IsServiceInstalled();
+        LayoutGeneralStatusMessages();
+    }
+
+    private void UpdateServiceStatusMessage()
+    {
+        _serviceWarning.Visible = !IsServiceInstalled();
+        LayoutServiceStatusMessage();
+    }
+
+    private static bool IsServiceInstalled()
+    {
+        try
+        {
+            return CompanionServiceManager.IsInstalled();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void LayoutGeneralStatusMessages()
+    {
+        var y = D(56);
+        var statusWidth = _generalDeviceCard?.Width ?? D(720);
+        foreach (var label in new[] { _generalMqttError, _generalServiceWarning })
+        {
+            if (!label.Visible)
+            {
+                continue;
+            }
+
+            label.Location = new Point(D(28), y);
+            label.Size = new Size(statusWidth, D(34));
+            label.BringToFront();
+            y += D(42);
+        }
+
+        var firstCardTop = y == D(56) ? D(64) : y + D(8);
+        if (_generalDeviceCard is not null)
+        {
+            _generalDeviceCard.Top = firstCardTop;
+        }
+
+        if (_generalNetworkCard is not null && _generalDeviceCard is not null)
+        {
+            _generalNetworkCard.Top = _generalDeviceCard.Bottom + D(20);
+        }
+
+        if (_generalFilesCard is not null && _generalNetworkCard is not null)
+        {
+            _generalFilesCard.Top = _generalNetworkCard.Bottom + D(20);
+        }
+    }
+
+    private void LayoutServiceStatusMessage()
+    {
+        var firstCardTop = D(56);
+        if (_serviceWarning.Visible)
+        {
+            _serviceWarning.Location = Pt(28, 56);
+            _serviceWarning.Size = new Size(_serviceStatusCard?.Width ?? D(600), D(34));
+            _serviceWarning.BringToFront();
+            firstCardTop = D(98);
+        }
+
+        if (_serviceStatusCard is not null)
+        {
+            _serviceStatusCard.Top = firstCardTop;
+        }
+
+        if (_serviceActionsCard is not null && _serviceStatusCard is not null)
+        {
+            _serviceActionsCard.Top = _serviceStatusCard.Bottom + D(12);
+        }
+    }
+
     private Panel BuildCapabilitiesPage()
     {
         var page = MakePage();
 
         AddPageTitle(page, S("Cap.Title"));
 
-        var card1 = MakeCard(page, 28, 56, 600, 232, S("Cap.Functions"));
+        var card1 = MakeCard(page, 28, 56, 600, 300, S("Cap.Functions"));
         var y = 44;
         y = AddCheck(card1, _capNotify, S("Cap.Notifications"), y);
         y = AddCheck(card1, _capMedia, S("Cap.MediaPlayer"), y);
         y = AddCheck(card1, _capSensorsService, S("Cap.SensorsService"), y);
         y = AddCheck(card1, _capSensorsApp, S("Cap.SensorsApp"), y);
         y += 6;
-        AddField(card1, S("Cap.SensorInterval"), _sensorInterval, y, inputWidth: 100);
+        y = AddField(card1, S("Cap.FastSensorInterval"), _fastSensorInterval, y, inputWidth: 100);
         card1.Controls.Add(new Label
         {
-            Text = S("Cap.Seconds"), Location = Pt(260, y + 4), AutoSize = true, ForeColor = TextMuted
+            Text = S("Cap.Seconds"), Location = Pt(260, y - 30), AutoSize = true, ForeColor = TextMuted
+        });
+        y = AddField(card1, S("Cap.NormalSensorInterval"), _normalSensorInterval, y, inputWidth: 100);
+        card1.Controls.Add(new Label
+        {
+            Text = S("Cap.Seconds"), Location = Pt(260, y - 30), AutoSize = true, ForeColor = TextMuted
+        });
+        y = AddField(card1, S("Cap.HourlySensorInterval"), _hourlySensorInterval, y, inputWidth: 100);
+        card1.Controls.Add(new Label
+        {
+            Text = S("Cap.Seconds"), Location = Pt(260, y - 30), AutoSize = true, ForeColor = TextMuted
         });
 
-        var cmdY = 300;
+        var cmdY = 368;
         var card2 = MakeCard(page, 28, cmdY, 600, 50 + SystemCommandCatalog.Commands.Count * 30 + 16, S("Cap.Commands"));
         y = 44;
         card2.Controls.Add(new Label { Text = "Tray", Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = TextMuted, Location = Pt(320, y), AutoSize = true });
@@ -423,6 +570,13 @@ internal sealed class MainForm : Form
             Size = Sz(600, 420),
             Font = new Font("Segoe UI", 9.5F)
         };
+        page.Layout += (_, _) =>
+        {
+            var hPad = D(28);
+            var bottom = D(12);
+            tabs.Width = Math.Max(D(400), page.ClientSize.Width - hPad * 2);
+            tabs.Height = Math.Max(D(200), page.ClientSize.Height - tabs.Top - bottom);
+        };
 
         var builtInTab = new TabPage(S("Sensors.BuiltIn")) { BackColor = CardBg, Padding = new Padding(D(4)) };
         SetupBuiltInGrid();
@@ -434,10 +588,25 @@ internal sealed class MainForm : Form
         SetupCustomGrid();
         _customGrid.Dock = DockStyle.Fill;
 
+        var infoPanel = BuildCustomSensorInfoPanel();
+
         var btnPanel = new Panel { Dock = DockStyle.Bottom, Height = D(40), BackColor = CardBg };
         var addBtn = MakeSecondaryButton(S("Sensors.Add"), 110, 30);
         addBtn.Location = Pt(4, 6);
-        addBtn.Click += (_, _) => _customGrid.Rows.Add(true, true, true, CustomSensorTypes.ProcessRunning, S("Sensors.NewSensor"), "notepad");
+        addBtn.Click += (_, _) =>
+        {
+            var rowIndex = AddCustomSensorRow(new CustomSensorDefinition
+                {
+                    Enabled = true,
+                    TrayApp = true,
+                    Service = true,
+                    Type = CustomSensorTypes.ProcessRunning,
+                    Name = S("Sensors.NewSensor"),
+                    Parameter = "notepad",
+                    PollingProfile = SensorPollingProfiles.ToKey(SensorPollingProfile.Normal)
+                });
+            MarkCustomSensorValueNotTested(_customGrid.Rows[rowIndex]);
+        };
 
         var removeBtn = MakeSecondaryButton(S("Sensors.Remove"), 90, 30);
         removeBtn.Location = new Point(addBtn.Right + D(8), D(6));
@@ -446,11 +615,73 @@ internal sealed class MainForm : Form
             if (_customGrid.CurrentRow is { IsNewRow: false } row)
                 _customGrid.Rows.Remove(row);
         };
+        var testBtn = MakeSecondaryButton(S("Sensors.TestValue"), 110, 30);
+        testBtn.Location = new Point(removeBtn.Right + D(8), D(6));
+        testBtn.Click += async (_, _) => await UpdateSelectedCustomSensorValueAsync();
         btnPanel.Controls.Add(addBtn);
         btnPanel.Controls.Add(removeBtn);
+        btnPanel.Controls.Add(testBtn);
+
+        _customGrid.CellEndEdit += (_, e) =>
+        {
+            if (e.RowIndex >= 0 &&
+                _customGrid.Columns[e.ColumnIndex].Name is "Type" or "Parameter")
+            {
+                MarkCustomSensorValueNotTested(_customGrid.Rows[e.RowIndex]);
+            }
+        };
+        _customGrid.CurrentCellDirtyStateChanged += (_, _) =>
+        {
+            if (_customGrid.IsCurrentCellDirty)
+            {
+                _customGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            }
+        };
+
+        _builtInGrid.CellClick += (_, e) =>
+        {
+            if (e.RowIndex < 0 ||
+                e.ColumnIndex < 0 ||
+                _builtInGrid.Columns[e.ColumnIndex].Name != "Attributes" ||
+                _builtInGrid.Rows[e.RowIndex].Tag is not string key ||
+                BuiltInSensorCatalog.Find(key) is not { HasMultipleValues: true } definition)
+            {
+                return;
+            }
+
+            var rowIndexes = new List<int>();
+            foreach (var attributePath in definition.AttributePaths ?? [])
+            {
+                rowIndexes.Add(AddCustomSensorRow(new CustomSensorDefinition
+                {
+                    Enabled = true,
+                    TrayApp = definition.SupportsTrayApp,
+                    Service = definition.SupportsService,
+                    Type = CustomSensorTypes.BuiltInAttribute,
+                    Name = string.Format(S("Sensors.AttributeSensorName"), S($"Sensor.{definition.Key}"), GetAttributeDisplayName(attributePath)),
+                    Parameter = attributePath,
+                    PollingProfile = SensorPollingProfiles.ToKey(definition.PollingProfile)
+                }));
+            }
+
+            if (rowIndexes.Count == 0)
+            {
+                return;
+            }
+
+            tabs.SelectedTab = customTab;
+            _customGrid.ClearSelection();
+            _customGrid.Rows[rowIndexes[0]].Selected = true;
+            _customGrid.CurrentCell = _customGrid.Rows[rowIndexes[0]].Cells["Parameter"];
+            foreach (var rowIndex in rowIndexes)
+            {
+                MarkCustomSensorValueNotTested(_customGrid.Rows[rowIndex]);
+            }
+        };
 
         customTab.Controls.Add(_customGrid);
         customTab.Controls.Add(btnPanel);
+        customTab.Controls.Add(infoPanel);
         tabs.TabPages.Add(customTab);
 
         page.Controls.Add(tabs);
@@ -467,6 +698,17 @@ internal sealed class MainForm : Form
             Name = "Name", HeaderText = S("Sensors.Sensor"), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
             MinimumWidth = D(200), ReadOnly = true
         });
+        _builtInGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Profile", HeaderText = S("Sensors.Profile"), Width = D(92), ReadOnly = true,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
+        _builtInGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Attributes", HeaderText = string.Empty, Width = D(36), ReadOnly = true,
+            SortMode = DataGridViewColumnSortMode.NotSortable,
+            DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
     }
 
     private void SetupCustomGrid()
@@ -475,19 +717,87 @@ internal sealed class MainForm : Form
         _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Enabled", HeaderText = S("Sensors.Active"), Width = D(50) });
         _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "TrayApp", HeaderText = "Tray", Width = D(50) });
         _customGrid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Service", HeaderText = "Svc", Width = D(50) });
-        var sensorTypes = new[] { CustomSensorTypes.ProcessRunning, CustomSensorTypes.ServiceStatus, CustomSensorTypes.DiskFree }
-            .Select(t => new { Key = t, Display = S($"SensorType.{t}") }).ToArray();
+        var sensorTypes = new[]
+        {
+            CustomSensorTypes.ProcessRunning,
+            CustomSensorTypes.ServiceStatus,
+            CustomSensorTypes.DiskFree,
+            CustomSensorTypes.BuiltInAttribute
+        }
+            .Select(t => new KeyValuePair<string, string>(t, S($"SensorType.{t}")))
+            .ToArray();
         _customGrid.Columns.Add(new DataGridViewComboBoxColumn
         {
             Name = "Type", HeaderText = S("Sensors.Type"), Width = D(150),
-            DataSource = sensorTypes, ValueMember = "Key", DisplayMember = "Display"
+            DataSource = sensorTypes, ValueMember = "Key", DisplayMember = "Value"
         });
         _customGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = S("Sensors.Name"), Width = D(130) });
+        _customGrid.Columns.Add(new DataGridViewComboBoxColumn
+        {
+            Name = "Profile", HeaderText = S("Sensors.Profile"), Width = D(100),
+            DataSource = BuildPollingProfileOptions(), ValueMember = "Key", DisplayMember = "Value"
+        });
         _customGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Parameter", HeaderText = S("Sensors.Parameter"),
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = D(80)
+            Width = D(170), MinimumWidth = D(80)
         });
+        _customGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Value", HeaderText = S("Sensors.Value"), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            MinimumWidth = D(110), ReadOnly = true
+        });
+    }
+
+    private Panel BuildCustomSensorInfoPanel()
+    {
+        var panel = new Panel { Dock = DockStyle.Top, Height = D(78), BackColor = Color.FromArgb(239, 246, 255) };
+        panel.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(191, 219, 254));
+            e.Graphics.DrawRectangle(pen, 0, 0, panel.Width - 1, panel.Height - 1);
+        };
+
+        panel.Controls.Add(new Label
+        {
+            Text = "i",
+            Location = Pt(10, 10),
+            Size = Sz(22, 22),
+            TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = BtnBlue,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+        });
+        panel.Controls.Add(new Label
+        {
+            Text = S("Sensors.CustomHelp"),
+            Location = Pt(40, 8),
+            Size = Sz(520, 64),
+            ForeColor = TextBody,
+            Font = new Font("Segoe UI", 8.5F)
+        });
+        return panel;
+    }
+
+    private static string GetAttributeDisplayName(string attributePath)
+    {
+        var lastDot = attributePath.LastIndexOf('.');
+        var name = lastDot >= 0 ? attributePath[(lastDot + 1)..] : attributePath;
+        return name.Replace("[0]", string.Empty);
+    }
+
+    private KeyValuePair<string, string>[] BuildPollingProfileOptions()
+    {
+        return Enum.GetValues<SensorPollingProfile>()
+            .Select(profile => new KeyValuePair<string, string>(
+                SensorPollingProfiles.ToKey(profile),
+                GetPollingProfileDisplayName(profile)))
+            .ToArray();
+    }
+
+    private string GetPollingProfileDisplayName(SensorPollingProfile profile)
+    {
+        return S($"PollingProfile.{SensorPollingProfiles.ToKey(profile)}");
     }
 
     private void StyleGrid(DataGridView grid)
@@ -518,6 +828,14 @@ internal sealed class MainForm : Form
         var page = MakePage();
         AddPageTitle(page, S("Service.Title"));
 
+        ConfigureStatusLabel(
+            _serviceWarning,
+            "⚠  " + S("General.ServiceNotInstalledWarning"),
+            Color.FromArgb(255, 243, 224),
+            Color.FromArgb(180, 60, 0));
+        page.Controls.Add(_serviceWarning);
+        page.Layout += (_, _) => LayoutServiceStatusMessage();
+
         var statusLabel = new Label
         {
             Text = CompanionServiceManager.GetStatusText(),
@@ -526,14 +844,21 @@ internal sealed class MainForm : Form
         };
 
         var card1 = MakeCard(page, 28, 56, 600, 160, S("Service.Status"));
+        _serviceStatusCard = card1;
         card1.Controls.Add(statusLabel);
 
         var refreshBtn = MakeSecondaryButton(S("Service.Refresh"), 100, 30);
         refreshBtn.Location = Pt(20, 116);
-        refreshBtn.Click += (_, _) => statusLabel.Text = CompanionServiceManager.GetStatusText();
+        refreshBtn.Click += (_, _) =>
+        {
+            statusLabel.Text = CompanionServiceManager.GetStatusText();
+            UpdateGeneralStatusMessages();
+            UpdateServiceStatusMessage();
+        };
         card1.Controls.Add(refreshBtn);
 
         var card2 = MakeCard(page, 28, 228, 600, 140, S("Service.Actions"));
+        _serviceActionsCard = card2;
 
         var installBtn = MakePrimaryButton(S("Service.Install"), 170, 36);
         installBtn.Location = Pt(20, 48);
@@ -541,6 +866,8 @@ internal sealed class MainForm : Form
         {
             CompanionServiceManager.RunElevated("--install-service", _log);
             statusLabel.Text = CompanionServiceManager.GetStatusText();
+            UpdateGeneralStatusMessages();
+            UpdateServiceStatusMessage();
         };
         card2.Controls.Add(installBtn);
 
@@ -550,6 +877,8 @@ internal sealed class MainForm : Form
         {
             CompanionServiceManager.RunElevated("--start-service", _log);
             statusLabel.Text = CompanionServiceManager.GetStatusText();
+            UpdateGeneralStatusMessages();
+            UpdateServiceStatusMessage();
         };
         card2.Controls.Add(startBtn);
 
@@ -559,6 +888,8 @@ internal sealed class MainForm : Form
         {
             CompanionServiceManager.RunElevated("--stop-service", _log);
             statusLabel.Text = CompanionServiceManager.GetStatusText();
+            UpdateGeneralStatusMessages();
+            UpdateServiceStatusMessage();
         };
         card2.Controls.Add(stopBtn);
 
@@ -572,10 +903,13 @@ internal sealed class MainForm : Form
             {
                 CompanionServiceManager.RunElevated("--uninstall-service", _log);
                 statusLabel.Text = CompanionServiceManager.GetStatusText();
+                UpdateGeneralStatusMessages();
+                UpdateServiceStatusMessage();
             }
         };
         card2.Controls.Add(uninstallBtn);
 
+        UpdateServiceStatusMessage();
         return page;
     }
 
@@ -583,40 +917,55 @@ internal sealed class MainForm : Form
     {
         var page = MakePage();
 
-        var card = MakeCard(page, 28, 56, 600, 200, null);
+        var card = MakeCard(page, 28, 56, 600, 246, null);
+
+        var icon = LoadIcon();
+        if (icon is not null)
+        {
+            card.Controls.Add(new PictureBox
+            {
+                Image = icon.ToBitmap(),
+                Location = Pt(28, 26),
+                Size = Sz(72, 72),
+                SizeMode = PictureBoxSizeMode.Zoom
+            });
+        }
 
         card.Controls.Add(new Label
         {
             Text = AppIdentity.DisplayName, Font = new Font("Segoe UI", 18F, FontStyle.Bold),
-            ForeColor = TextDark, Location = Pt(28, 24), AutoSize = true
+            ForeColor = TextDark, Location = Pt(120, 24), AutoSize = true
         });
         card.Controls.Add(new Label
         {
             Text = $"{S("About.Version")}: {_settings.SoftwareVersion}",
-            ForeColor = TextBody, Location = Pt(28, 62), AutoSize = true
+            ForeColor = TextBody, Location = Pt(122, 62), AutoSize = true
         });
         card.Controls.Add(new Label
         {
             Text = $"{S("About.Developer")}: {_settings.Manufacturer}",
-            ForeColor = TextBody, Location = Pt(28, 86), AutoSize = true
+            ForeColor = TextBody, Location = Pt(122, 86), AutoSize = true
         });
         card.Controls.Add(new Label
         {
             Text = S("About.Description"),
-            ForeColor = TextMuted, Location = Pt(28, 120), AutoSize = true
+            ForeColor = TextMuted, Location = Pt(122, 120), AutoSize = true
         });
 
-        var ghLink = new LinkLabel
-        {
-            Text = "GitHub", Location = Pt(28, 152), AutoSize = true,
-            LinkColor = BtnBlue, ActiveLinkColor = BtnBlueHover
-        };
-        ghLink.LinkClicked += (_, _) =>
-        {
-            try { Process.Start(new ProcessStartInfo("https://github.com/LAB02-Research/HASS.Agent") { UseShellExecute = true }); }
-            catch { }
-        };
-        card.Controls.Add(ghLink);
+        var githubBtn = MakeSecondaryButton("GitHub", 110, 32);
+        githubBtn.Location = Pt(28, 174);
+        githubBtn.Click += (_, _) => OpenUrl(AppIdentity.GitHubRepositoryUrl);
+        card.Controls.Add(githubBtn);
+
+        var issueBtn = MakeSecondaryButton(S("About.ReportIssue"), 150, 32);
+        issueBtn.Location = new Point(githubBtn.Right + D(8), D(174));
+        issueBtn.Click += (_, _) => OpenUrl($"{AppIdentity.GitHubRepositoryUrl}/issues/new");
+        card.Controls.Add(issueBtn);
+
+        var updateBtn = MakePrimaryButton(S("About.CheckUpdates"), 160, 32);
+        updateBtn.Location = new Point(issueBtn.Right + D(8), D(174));
+        updateBtn.Click += async (_, _) => await CheckForUpdatesAsync(updateBtn);
+        card.Controls.Add(updateBtn);
 
         return page;
     }
@@ -648,7 +997,9 @@ internal sealed class MainForm : Form
         _capMedia.Checked = _settings.MqttMediaPlayerEnabled;
         _capSensorsService.Checked = _settings.MqttServiceSystemSensorsEnabled;
         _capSensorsApp.Checked = _settings.MqttSystemSensorsEnabled;
-        _sensorInterval.Value = _settings.SystemSensorsIntervalSeconds;
+        _fastSensorInterval.Value = _settings.FastSensorIntervalSeconds;
+        _normalSensorInterval.Value = _settings.NormalSensorIntervalSeconds;
+        _hourlySensorInterval.Value = _settings.HourlySensorIntervalSeconds;
 
         foreach (var row in _cmdRows)
         {
@@ -660,16 +1011,209 @@ internal sealed class MainForm : Form
         foreach (var def in BuiltInSensorCatalog.Sensors)
         {
             var s = _settings.BuiltInSensors.FirstOrDefault(x => x.Key == def.Key);
-            var ri = _builtInGrid.Rows.Add(s?.TrayApp ?? def.SupportsTrayApp, s?.Service ?? def.SupportsService, S($"Sensor.{def.Key}"));
+            var ri = _builtInGrid.Rows.Add(
+                s?.TrayApp ?? def.SupportsTrayApp,
+                s?.Service ?? def.SupportsService,
+                S($"Sensor.{def.Key}"),
+                GetPollingProfileDisplayName(def.PollingProfile),
+                def.HasMultipleValues ? "+" : string.Empty);
             _builtInGrid.Rows[ri].Tag = def.Key;
             if (!def.SupportsTrayApp) { _builtInGrid.Rows[ri].Cells["TrayApp"].ReadOnly = true; _builtInGrid.Rows[ri].Cells["TrayApp"].Style.BackColor = SystemColors.Control; }
             if (!def.SupportsService) { _builtInGrid.Rows[ri].Cells["Service"].ReadOnly = true; _builtInGrid.Rows[ri].Cells["Service"].Style.BackColor = SystemColors.Control; }
+            if (def.HasMultipleValues)
+            {
+                _builtInGrid.Rows[ri].Cells["Attributes"].ToolTipText = S("Sensors.MultiValueTooltip");
+                _builtInGrid.Rows[ri].Cells["Attributes"].Style.ForeColor = BtnBlue;
+            }
         }
 
         foreach (var sensor in _settings.CustomSensors)
         {
-            var ri = _customGrid.Rows.Add(sensor.Enabled, sensor.TrayApp, sensor.Service, sensor.Type, sensor.Name, sensor.Parameter);
-            _customGrid.Rows[ri].Tag = sensor.Id;
+            AddCustomSensorRow(sensor);
+        }
+        MarkAllCustomSensorValuesNotTested();
+    }
+
+    private int AddCustomSensorRow(CustomSensorDefinition sensor)
+    {
+        var rowIndex = _customGrid.Rows.Add(
+            sensor.Enabled,
+            sensor.TrayApp,
+            sensor.Service,
+            sensor.Type,
+            sensor.Name,
+            SensorPollingProfiles.NormalizeKey(sensor.PollingProfile, SensorPollingProfile.Normal),
+            sensor.Parameter);
+        _customGrid.Rows[rowIndex].Tag = sensor.Id;
+        return rowIndex;
+    }
+
+    private async Task UpdateSelectedCustomSensorValueAsync()
+    {
+        _customGrid.EndEdit();
+        if (_customGrid.CurrentRow is { IsNewRow: false } row)
+        {
+            await UpdateCustomSensorRowValueAsync(row);
+        }
+    }
+
+    private void MarkAllCustomSensorValuesNotTested()
+    {
+        if (!_customGrid.Columns.Contains("Value"))
+        {
+            return;
+        }
+
+        foreach (var row in _customGrid.Rows.Cast<DataGridViewRow>().Where(row => !row.IsNewRow))
+        {
+            MarkCustomSensorValueNotTested(row);
+        }
+    }
+
+    private void MarkCustomSensorValueNotTested(DataGridViewRow row)
+    {
+        if (row.IsNewRow || !_customGrid.Columns.Contains("Value"))
+        {
+            return;
+        }
+
+        var parameter = Convert.ToString(row.Cells["Parameter"].Value) ?? string.Empty;
+        row.Cells["Value"].Value = string.IsNullOrWhiteSpace(parameter)
+            ? S("Sensors.ValueMissingParameter")
+            : S("Sensors.ValueNotTested");
+    }
+
+    private async Task UpdateCustomSensorRowValueAsync(DataGridViewRow row)
+    {
+        if (row.IsNewRow || !_customGrid.Columns.Contains("Value"))
+        {
+            return;
+        }
+
+        var valueCell = row.Cells["Value"];
+        var parameter = Convert.ToString(row.Cells["Parameter"].Value) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(parameter))
+        {
+            valueCell.Value = S("Sensors.ValueMissingParameter");
+            return;
+        }
+
+        valueCell.Value = S("Sensors.ValueLoading");
+        try
+        {
+            var sensor = BuildCustomSensorFromRow(row, forceEnabled: true);
+            var state = await Task.Run(() =>
+            {
+                using var metrics = new SystemMetricsService(_log, null);
+                return metrics.Read([sensor], serviceRole: false).CustomSensors.FirstOrDefault();
+            });
+            if (row.DataGridView is null || row.DataGridView.IsDisposed)
+            {
+                return;
+            }
+
+            valueCell.Value = FormatSensorValue(state?.Value);
+        }
+        catch (Exception ex)
+        {
+            if (row.DataGridView is null || row.DataGridView.IsDisposed)
+            {
+                return;
+            }
+
+            valueCell.Value = string.Format(S("Sensors.ValueError"), ex.Message);
+        }
+    }
+
+    private CustomSensorDefinition BuildCustomSensorFromRow(DataGridViewRow row, bool forceEnabled)
+    {
+        var type = Convert.ToString(row.Cells["Type"].Value) ?? CustomSensorTypes.ProcessRunning;
+        var name = Convert.ToString(row.Cells["Name"].Value) ?? string.Empty;
+        var parameter = Convert.ToString(row.Cells["Parameter"].Value) ?? string.Empty;
+        var pollingProfile = Convert.ToString(row.Cells["Profile"].Value) ?? SensorPollingProfiles.ToKey(SensorPollingProfile.Normal);
+        return new CustomSensorDefinition
+        {
+            Id = Convert.ToString(row.Tag) ?? Guid.NewGuid().ToString("N"),
+            Enabled = forceEnabled || Convert.ToBoolean(row.Cells["Enabled"].Value ?? true),
+            Type = type,
+            Name = string.IsNullOrWhiteSpace(name) ? type : name.Trim(),
+            Parameter = parameter.Trim(),
+            PollingProfile = SensorPollingProfiles.NormalizeKey(pollingProfile, SensorPollingProfile.Normal),
+            Service = forceEnabled || Convert.ToBoolean(row.Cells["Service"].Value ?? false),
+            TrayApp = forceEnabled || Convert.ToBoolean(row.Cells["TrayApp"].Value ?? false)
+        };
+    }
+
+    private static string FormatSensorValue(object? value)
+    {
+        return value switch
+        {
+            null => "null",
+            bool boolValue => boolValue ? "true" : "false",
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty
+        };
+    }
+
+    private async Task CheckForUpdatesAsync(Button updateButton)
+    {
+        var originalText = updateButton.Text;
+        updateButton.Enabled = false;
+        updateButton.Text = S("About.CheckingUpdates");
+
+        try
+        {
+            var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion);
+            if (!string.IsNullOrWhiteSpace(update.Error))
+            {
+                MessageBox.Show(S("About.UpdateCheckFailed"), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!update.UpdateAvailable)
+            {
+                MessageBox.Show(string.Format(S("About.NoUpdates"), update.LatestVersion), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                string.Format(S("About.UpdateAvailable"), update.LatestVersion, update.InstalledVersion),
+                AppIdentity.DisplayName,
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+            if (confirm != DialogResult.Yes)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(update.DownloadUrl))
+            {
+                OpenUrl(update.ReleaseUrl ?? $"{AppIdentity.GitHubRepositoryUrl}/releases/latest");
+                return;
+            }
+
+            updateButton.Text = S("About.DownloadingUpdate");
+            var downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            var targetPath = await AppUpdateService.DownloadAsync(update, downloads);
+
+            var open = MessageBox.Show(
+                string.Format(S("About.UpdateDownloaded"), targetPath),
+                AppIdentity.DisplayName,
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+            if (open == DialogResult.Yes)
+            {
+                Process.Start(new ProcessStartInfo(targetPath) { UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(string.Format(S("About.UpdateError"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            updateButton.Text = originalText;
+            updateButton.Enabled = true;
         }
     }
 
@@ -702,7 +1246,9 @@ internal sealed class MainForm : Form
         _settings.MqttMediaPlayerEnabled = _capMedia.Checked;
         _settings.MqttServiceSystemSensorsEnabled = _capSensorsService.Checked;
         _settings.MqttSystemSensorsEnabled = _capSensorsApp.Checked;
-        _settings.SystemSensorsIntervalSeconds = (int)_sensorInterval.Value;
+        _settings.FastSensorIntervalSeconds = (int)_fastSensorInterval.Value;
+        _settings.NormalSensorIntervalSeconds = (int)_normalSensorInterval.Value;
+        _settings.HourlySensorIntervalSeconds = (int)_hourlySensorInterval.Value;
 
         _settings.TrayAppCommands = _cmdRows
             .Where(r => r.TrayApp.Checked)
@@ -731,6 +1277,7 @@ internal sealed class MainForm : Form
             if (string.IsNullOrWhiteSpace(param)) continue;
             var type = Convert.ToString(row.Cells["Type"].Value) ?? CustomSensorTypes.ProcessRunning;
             var name = Convert.ToString(row.Cells["Name"].Value) ?? string.Empty;
+            var pollingProfile = Convert.ToString(row.Cells["Profile"].Value) ?? SensorPollingProfiles.ToKey(SensorPollingProfile.Normal);
             sensors.Add(new CustomSensorDefinition
             {
                 Id = Convert.ToString(row.Tag) ?? Guid.NewGuid().ToString("N"),
@@ -738,6 +1285,7 @@ internal sealed class MainForm : Form
                 Type = type,
                 Name = string.IsNullOrWhiteSpace(name) ? type : name.Trim(),
                 Parameter = param.Trim(),
+                PollingProfile = SensorPollingProfiles.NormalizeKey(pollingProfile, SensorPollingProfile.Normal),
                 Service = Convert.ToBoolean(row.Cells["Service"].Value ?? false),
                 TrayApp = Convert.ToBoolean(row.Cells["TrayApp"].Value ?? false)
             });
@@ -746,6 +1294,8 @@ internal sealed class MainForm : Form
 
         SettingsStore.Save(_paths, _settings);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
+        UpdateGeneralStatusMessages();
+        UpdateServiceStatusMessage();
 
         var msg = langChanged
             ? $"{S("Msg.SettingsSaved")}\n\n{S("Msg.RestartRequired")}"
@@ -763,9 +1313,7 @@ internal sealed class MainForm : Form
         page.Layout += (_, _) =>
         {
             var padding = D(56);
-            var maxWidth = D(860);
-            var w = Math.Min(page.ClientSize.Width - padding, maxWidth);
-            if (w < D(400)) w = page.ClientSize.Width - padding;
+            var w = Math.Max(D(400), page.ClientSize.Width - padding);
             foreach (Control c in page.Controls)
             {
                 if (c is Label) continue;
@@ -867,6 +1415,12 @@ internal sealed class MainForm : Form
     private static void OpenFolder(string path)
     {
         try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+        catch { }
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
         catch { }
     }
 

@@ -10,4 +10,6 @@ internal static class AppIdentity
     public const string ServiceName = "HASS.Agent.NET10.Service";
     public const string ServiceDisplayName = "HASS.Agent .NET10 Service";
     public const string ServiceDescription = "Background system service for HASS.Agent .NET10 commands that must work without a logged-in user.";
+    public const string GitHubRepository = "v1k70rk4/HASS.Agent";
+    public const string GitHubRepositoryUrl = "https://github.com/v1k70rk4/HASS.Agent";
 }

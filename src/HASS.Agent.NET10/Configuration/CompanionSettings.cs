@@ -16,6 +16,8 @@ internal sealed class CompanionSettings
 
     public int Port { get; set; } = 5115;
 
+    public string ApiKey { get; set; } = string.Empty;
+
     public bool ShowStartupNotification { get; set; }
 
     public bool AutoStartOnLogin { get; set; }
@@ -57,7 +59,11 @@ internal sealed class CompanionSettings
 
     public bool MqttServiceSystemSensorsEnabled { get; set; } = true;
 
-    public int SystemSensorsIntervalSeconds { get; set; } = 15;
+    public int FastSensorIntervalSeconds { get; set; } = 10;
+
+    public int NormalSensorIntervalSeconds { get; set; } = 60;
+
+    public int HourlySensorIntervalSeconds { get; set; } = 3600;
 
     public List<string> TrayAppCommands { get; set; } = SystemCommandCatalog.DefaultTrayAppCommands.ToList();
 
@@ -144,6 +150,11 @@ internal sealed class CompanionSettings
             SerialNumber = Guid.NewGuid().ToString("N");
         }
 
+        if (string.IsNullOrWhiteSpace(ApiKey))
+        {
+            ApiKey = Guid.NewGuid().ToString("N");
+        }
+
         if (Port is < 1 or > 65535)
         {
             Port = 5115;
@@ -154,10 +165,9 @@ internal sealed class CompanionSettings
             MqttPort = MqttUseTls ? 8883 : 1883;
         }
 
-        if (SystemSensorsIntervalSeconds is < 5 or > 3600)
-        {
-            SystemSensorsIntervalSeconds = 15;
-        }
+        FastSensorIntervalSeconds = NormalizeInterval(FastSensorIntervalSeconds, 10, max: 3600);
+        NormalSensorIntervalSeconds = NormalizeInterval(NormalSensorIntervalSeconds, 60, max: 86400);
+        HourlySensorIntervalSeconds = NormalizeInterval(HourlySensorIntervalSeconds, 3600, max: 86400);
 
         TrayAppCommands = NormalizeCommandList(TrayAppCommands, SystemCommandCatalog.DefaultTrayAppCommands);
         ServiceCommands = NormalizeCommandList(ServiceCommands, SystemCommandCatalog.DefaultServiceCommands)
@@ -171,6 +181,11 @@ internal sealed class CompanionSettings
     private static string NormalizeText(string value, string fallback)
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static int NormalizeInterval(int value, int fallback, int max)
+    {
+        return value is < 10 || value > max ? fallback : value;
     }
 
     private static List<string> NormalizeCommandList(List<string>? commands, IReadOnlyList<string> defaults)
@@ -199,6 +214,7 @@ internal sealed class CompanionSettings
             sensor.Type = CustomSensorTypes.Normalize(sensor.Type);
             sensor.Name = NormalizeText(sensor.Name, sensor.Type);
             sensor.Parameter = sensor.Parameter.Trim();
+            sensor.PollingProfile = SensorPollingProfiles.NormalizeKey(sensor.PollingProfile, SensorPollingProfile.Normal);
 
             if (string.IsNullOrWhiteSpace(sensor.Parameter))
             {

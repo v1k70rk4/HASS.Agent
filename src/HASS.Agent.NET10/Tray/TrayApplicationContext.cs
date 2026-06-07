@@ -133,7 +133,7 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
 
     private ToolStripMenuItem BuildServiceMenu()
     {
-        var serviceMenu = new ToolStripMenuItem("System service");
+        var serviceMenu = new ToolStripMenuItem(Strings.Get("Tray.Service"));
         serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceStatus"), null, (_, _) => ShowServiceStatus());
         serviceMenu.DropDownItems.Add(new ToolStripSeparator());
         serviceMenu.DropDownItems.Add(Strings.Get("Tray.ServiceInstall"), null, (_, _) => RunServiceCommand("--install-service"));

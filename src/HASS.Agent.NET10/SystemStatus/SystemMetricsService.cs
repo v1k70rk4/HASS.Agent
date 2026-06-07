@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using Microsoft.Win32;
@@ -17,6 +18,13 @@ namespace HASS.Agent.Companion.SystemStatus;
 
 internal sealed class SystemMetricsService : IDisposable
 {
+    private static readonly TimeSpan WindowsUpdatePendingCacheDuration = TimeSpan.FromMinutes(30);
+
+    private static readonly JsonSerializerOptions AttributeJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly object _cpuLock = new();
     private readonly AudioEndpointService? _audioEndpointService;
     private readonly MonitorPowerStateService? _monitorPowerStateService;
@@ -24,6 +32,13 @@ internal sealed class SystemMetricsService : IDisposable
     private ulong? _lastIdleTime;
     private ulong? _lastKernelTime;
     private ulong? _lastUserTime;
+    private DateTimeOffset? _lastWindowsUpdatePendingReadAt;
+    private bool _lastWindowsUpdatePending;
+    private SystemMetricsMessage? _lastMessage;
+    private IReadOnlyList<NetworkAddressInfo> _lastNetworkAddresses = [];
+    private IReadOnlyList<DisplayInfo> _lastDisplays = [];
+    private IReadOnlyList<EventLogErrorInfo> _lastRecentErrors = [];
+    private ShutdownInfo _lastShutdown = new(string.Empty, string.Empty, null, 0, string.Empty);
 
     public SystemMetricsService(FileLog log, MonitorPowerStateService? monitorPowerStateService, bool includeInteractiveMetrics = true)
     {
@@ -32,61 +47,93 @@ internal sealed class SystemMetricsService : IDisposable
         _includeInteractiveMetrics = includeInteractiveMetrics;
     }
 
-    public SystemMetricsMessage Read(IReadOnlyList<CustomSensorDefinition>? customSensors = null, bool serviceRole = false)
+    public SystemMetricsMessage Read(
+        IReadOnlyList<CustomSensorDefinition>? customSensors = null,
+        bool serviceRole = false,
+        IReadOnlySet<SensorPollingProfile>? dueProfiles = null)
     {
-        var memory = ReadMemory();
-        var drive = ReadSystemDrive();
-        var activeWindow = _includeInteractiveMetrics ? ReadActiveWindow() : (Title: string.Empty, ProcessName: string.Empty);
-        var power = ReadPowerStatus();
-        var session = ReadSessionStatus();
-        var wifi = ReadWifiStatus();
-        var sessions = ReadSessionCounts();
-        var sessionLocked = _includeInteractiveMetrics ? ReadSessionLocked() : null;
-        var networkAddresses = ReadNetworkAddresses();
-        var displays = _includeInteractiveMetrics ? ReadDisplays() : [];
-        var recentErrors = ReadRecentEventLogErrors(TimeSpan.FromHours(1));
-        var lastShutdown = ReadLastShutdownInfo();
+        var profiles = dueProfiles ?? SensorPollingProfiles.All;
+        var previous = _lastMessage;
+        if (previous is null)
+        {
+            profiles = SensorPollingProfiles.All;
+        }
 
-        return new SystemMetricsMessage(
-            CpuUsage: ReadCpuUsage(),
+        var updateFast = profiles.Contains(SensorPollingProfile.Fast);
+        var updateNormal = profiles.Contains(SensorPollingProfile.Normal);
+        var updateHourly = profiles.Contains(SensorPollingProfile.Hourly);
+        var updateStartup = profiles.Contains(SensorPollingProfile.Startup);
+
+        var memory = updateFast ? ReadMemory() : (UsagePercent: previous!.MemoryUsage, AvailableMb: previous.MemoryAvailableMb);
+        var activeWindow = updateFast && _includeInteractiveMetrics ? ReadActiveWindow() : (Title: previous?.ActiveWindow ?? string.Empty, ProcessName: previous?.ActiveProcess ?? string.Empty);
+        var sessionLocked = updateFast && _includeInteractiveMetrics ? ReadSessionLocked() : previous?.SessionLocked;
+
+        var drive = updateNormal ? ReadSystemDrive() : (FreePercent: previous!.SystemDriveFreePercent, FreeGb: previous.SystemDriveFreeGb);
+        var power = updateNormal ? ReadPowerStatus() : (BatteryLevel: previous!.BatteryLevel, Status: previous.PowerStatus, TimeRemainingSeconds: previous.BatteryTimeRemaining);
+        var session = updateNormal ? ReadSessionStatus() : (State: previous!.SessionState, User: previous.LoggedInUser);
+        var wifi = updateNormal ? ReadWifiStatus() : (Ssid: previous!.WifiSsid, Signal: previous.WifiSignal);
+        var sessions = updateNormal ? ReadSessionCounts() : (LoggedInUsers: previous!.LoggedInUsers, RdpSessions: previous.RdpSessions);
+
+        if (updateNormal)
+        {
+            _lastNetworkAddresses = ReadNetworkAddresses();
+            _lastDisplays = _includeInteractiveMetrics ? ReadDisplays() : [];
+        }
+
+        if (updateHourly)
+        {
+            _lastRecentErrors = ReadRecentEventLogErrors(TimeSpan.FromHours(1));
+        }
+
+        if (updateStartup)
+        {
+            _lastShutdown = ReadLastShutdownInfo();
+        }
+
+        var attributes = BuildAttributes(_lastNetworkAddresses, _lastDisplays, _lastRecentErrors, _lastShutdown);
+        var message = new SystemMetricsMessage(
+            CpuUsage: updateFast ? ReadCpuUsage() : previous!.CpuUsage,
             MemoryUsage: memory.UsagePercent,
             MemoryAvailableMb: memory.AvailableMb,
             SystemDriveFreePercent: drive.FreePercent,
             SystemDriveFreeGb: drive.FreeGb,
-            UptimeSeconds: Math.Max(0, Environment.TickCount64 / 1000),
-            ActiveWindow: _includeInteractiveMetrics ? LimitState(activeWindow.Title) : null,
-            ActiveProcess: _includeInteractiveMetrics ? LimitState(activeWindow.ProcessName) : null,
-            ForegroundAppTitle: _includeInteractiveMetrics ? BuildForegroundAppTitle(activeWindow) : null,
-            Volume: _audioEndpointService?.GetVolume(),
-            Muted: _audioEndpointService?.GetMuted(),
-            AudioOutputDevice: _includeInteractiveMetrics ? LimitState(_audioEndpointService?.GetOutputDeviceName() ?? string.Empty) : null,
-            MicrophoneMuted: _includeInteractiveMetrics ? _audioEndpointService?.GetMicrophoneMuted() : null,
+            UptimeSeconds: updateFast ? Math.Max(0, Environment.TickCount64 / 1000) : previous!.UptimeSeconds,
+            ActiveWindow: updateFast && _includeInteractiveMetrics ? LimitState(activeWindow.Title) : previous!.ActiveWindow,
+            ActiveProcess: updateFast && _includeInteractiveMetrics ? LimitState(activeWindow.ProcessName) : previous!.ActiveProcess,
+            ForegroundAppTitle: updateFast && _includeInteractiveMetrics ? BuildForegroundAppTitle(activeWindow) : previous!.ForegroundAppTitle,
+            Volume: updateFast ? _audioEndpointService?.GetVolume() : previous!.Volume,
+            Muted: updateFast ? _audioEndpointService?.GetMuted() : previous!.Muted,
+            AudioOutputDevice: updateNormal && _includeInteractiveMetrics ? LimitState(_audioEndpointService?.GetOutputDeviceName() ?? string.Empty) : previous!.AudioOutputDevice,
+            MicrophoneMuted: updateNormal && _includeInteractiveMetrics ? _audioEndpointService?.GetMicrophoneMuted() : previous!.MicrophoneMuted,
             BatteryLevel: power.BatteryLevel,
             PowerStatus: power.Status,
             BatteryTimeRemaining: power.TimeRemainingSeconds,
-            MonitorPowerState: _monitorPowerStateService?.State,
-            ActiveDisplay: _includeInteractiveMetrics ? FormatDisplayState(displays) : null,
-            NetworkAddress: networkAddresses.FirstOrDefault()?.Address ?? string.Empty,
-            VpnConnected: ReadVpnConnected(),
+            MonitorPowerState: updateNormal ? _monitorPowerStateService?.State : previous!.MonitorPowerState,
+            ActiveDisplay: updateNormal && _includeInteractiveMetrics ? FormatDisplayState(_lastDisplays) : previous!.ActiveDisplay,
+            NetworkAddress: updateNormal ? _lastNetworkAddresses.FirstOrDefault()?.Address ?? string.Empty : previous!.NetworkAddress,
+            VpnConnected: updateNormal ? ReadVpnConnected() : previous!.VpnConnected,
             WifiSsid: wifi.Ssid,
             WifiSignal: wifi.Signal,
-            IdleTimeSeconds: _includeInteractiveMetrics ? ReadIdleTimeSeconds() : null,
+            IdleTimeSeconds: updateFast && _includeInteractiveMetrics ? ReadIdleTimeSeconds() : previous!.IdleTimeSeconds,
             SessionLocked: sessionLocked,
-            UserPresent: _includeInteractiveMetrics ? session.State == "active" && sessionLocked is false && !string.IsNullOrWhiteSpace(session.User) : null,
-            ClipboardTextAvailable: _includeInteractiveMetrics ? ReadClipboardTextAvailable() : null,
+            UserPresent: updateFast && _includeInteractiveMetrics ? session.State == "active" && sessionLocked is false && !string.IsNullOrWhiteSpace(session.User) : previous!.UserPresent,
+            ClipboardTextAvailable: updateFast && _includeInteractiveMetrics ? ReadClipboardTextAvailable() : previous!.ClipboardTextAvailable,
             SessionState: session.State,
             LoggedInUser: session.User,
             LoggedInUsers: sessions.LoggedInUsers,
             RdpSessions: sessions.RdpSessions,
-            PendingReboot: ReadPendingReboot(),
-            WindowsUpdatePending: ReadWindowsUpdatePending(),
-            BluetoothEnabled: ReadBluetoothEnabled(),
-            EventLogErrorsRecent: recentErrors.Count,
-            LastShutdownReason: lastShutdown.Summary,
-            Attributes: BuildAttributes(networkAddresses, displays, recentErrors, lastShutdown),
-            BootTime: DateTimeOffset.Now.AddMilliseconds(-Environment.TickCount64),
-            CustomSensors: ReadCustomSensors(customSensors ?? [], serviceRole),
+            PendingReboot: updateNormal ? ReadPendingReboot() : previous!.PendingReboot,
+            WindowsUpdatePending: updateHourly ? ReadWindowsUpdatePending() : previous!.WindowsUpdatePending,
+            BluetoothEnabled: updateHourly ? ReadBluetoothEnabled() : previous!.BluetoothEnabled,
+            EventLogErrorsRecent: _lastRecentErrors.Count,
+            LastShutdownReason: _lastShutdown.Summary,
+            BootTime: updateStartup ? DateTimeOffset.Now.AddMilliseconds(-Environment.TickCount64) : previous!.BootTime,
+            CustomSensors: ReadCustomSensors(customSensors ?? [], serviceRole, attributes, profiles, previous?.CustomSensors ?? []),
+            Attributes: attributes,
             UpdatedAt: DateTimeOffset.UtcNow);
+
+        _lastMessage = message;
+        return message;
     }
 
     public void Dispose()
@@ -544,11 +591,93 @@ internal sealed class SystemMetricsService : IDisposable
             RegistryValueExists(RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager", "PendingFileRenameOperations");
     }
 
-    private static bool ReadWindowsUpdatePending()
+    private bool ReadWindowsUpdatePending()
     {
-        return RegistryKeyExists(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") ||
-            RegistryKeyExists(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Services\Pending") ||
-            RegistryKeyExists(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\PostRebootReporting");
+        if (_lastWindowsUpdatePendingReadAt is not null &&
+            DateTimeOffset.UtcNow - _lastWindowsUpdatePendingReadAt < WindowsUpdatePendingCacheDuration)
+        {
+            return _lastWindowsUpdatePending;
+        }
+
+        _lastWindowsUpdatePending = ReadWindowsUpdatePendingFromAgent();
+        _lastWindowsUpdatePendingReadAt = DateTimeOffset.UtcNow;
+        return _lastWindowsUpdatePending;
+    }
+
+    private static bool ReadWindowsUpdatePendingFromAgent()
+    {
+        object? session = null;
+        object? searcher = null;
+        object? result = null;
+        object? updates = null;
+
+        try
+        {
+            var sessionType = Type.GetTypeFromProgID("Microsoft.Update.Session");
+            if (sessionType is null)
+            {
+                return false;
+            }
+
+            session = Activator.CreateInstance(sessionType);
+            if (session is null)
+            {
+                return false;
+            }
+
+            searcher = sessionType.InvokeMember(
+                "CreateUpdateSearcher",
+                System.Reflection.BindingFlags.InvokeMethod,
+                null,
+                session,
+                null);
+            if (searcher is null)
+            {
+                return false;
+            }
+
+            result = searcher.GetType().InvokeMember(
+                "Search",
+                System.Reflection.BindingFlags.InvokeMethod,
+                null,
+                searcher,
+                ["IsInstalled=0 and IsHidden=0 and Type='Software'"]);
+
+            updates = result?.GetType().InvokeMember(
+                "Updates",
+                System.Reflection.BindingFlags.GetProperty,
+                null,
+                result,
+                null);
+
+            var count = updates?.GetType().InvokeMember(
+                "Count",
+                System.Reflection.BindingFlags.GetProperty,
+                null,
+                updates,
+                null);
+
+            return count is int updateCount && updateCount > 0;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            ReleaseComObject(updates);
+            ReleaseComObject(result);
+            ReleaseComObject(searcher);
+            ReleaseComObject(session);
+        }
+    }
+
+    private static void ReleaseComObject(object? value)
+    {
+        if (value is not null && Marshal.IsComObject(value))
+        {
+            _ = Marshal.ReleaseComObject(value);
+        }
     }
 
     private static bool ReadBluetoothEnabled()
@@ -701,15 +830,30 @@ internal sealed class SystemMetricsService : IDisposable
         };
     }
 
-    private static IReadOnlyList<CustomSensorState> ReadCustomSensors(IReadOnlyList<CustomSensorDefinition> sensors, bool serviceRole)
+    private static IReadOnlyList<CustomSensorState> ReadCustomSensors(
+        IReadOnlyList<CustomSensorDefinition> sensors,
+        bool serviceRole,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> attributes,
+        IReadOnlySet<SensorPollingProfile> dueProfiles,
+        IReadOnlyList<CustomSensorState> previousStates)
     {
+        var previousById = previousStates.ToDictionary(state => state.Id, StringComparer.OrdinalIgnoreCase);
+
         return sensors
             .Where(sensor => sensor.Enabled && (serviceRole ? sensor.Service : sensor.TrayApp))
-            .Select(ReadCustomSensor)
+            .Select(sensor =>
+            {
+                var profile = sensor.EffectivePollingProfile;
+                return dueProfiles.Contains(profile) || !previousById.TryGetValue(sensor.Id, out var previous)
+                    ? ReadCustomSensor(sensor, attributes)
+                    : previous;
+            })
             .ToList();
     }
 
-    private static CustomSensorState ReadCustomSensor(CustomSensorDefinition sensor)
+    private static CustomSensorState ReadCustomSensor(
+        CustomSensorDefinition sensor,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> attributes)
     {
         try
         {
@@ -736,6 +880,11 @@ internal sealed class SystemMetricsService : IDisposable
 
                 return new CustomSensorState(sensor.Id, Math.Round(drive.AvailableFreeSpace / 1024d / 1024d / 1024d, 1));
             }
+
+            if (sensor.IsBuiltInAttribute)
+            {
+                return new CustomSensorState(sensor.Id, ReadBuiltInAttributeValue(sensor.Parameter, attributes));
+            }
         }
         catch
         {
@@ -743,6 +892,78 @@ internal sealed class SystemMetricsService : IDisposable
         }
 
         return new CustomSensorState(sensor.Id, null);
+    }
+
+    private static object? ReadBuiltInAttributeValue(
+        string parameter,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> attributes)
+    {
+        var path = parameter.Trim();
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var element = JsonSerializer.SerializeToElement(attributes, AttributeJsonOptions);
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!TryApplyAttributePathPart(ref element, part))
+            {
+                return null;
+            }
+        }
+
+        return ToSensorValue(element);
+    }
+
+    private static bool TryApplyAttributePathPart(ref JsonElement element, string part)
+    {
+        var bracketIndex = part.IndexOf('[', StringComparison.Ordinal);
+        var propertyName = bracketIndex >= 0 ? part[..bracketIndex] : part;
+
+        if (!string.IsNullOrWhiteSpace(propertyName))
+        {
+            if (element.ValueKind != JsonValueKind.Object ||
+                !element.TryGetProperty(propertyName, out var property))
+            {
+                return false;
+            }
+
+            element = property;
+        }
+
+        while (bracketIndex >= 0)
+        {
+            var bracketEnd = part.IndexOf(']', bracketIndex + 1);
+            if (bracketEnd < 0 ||
+                !int.TryParse(part[(bracketIndex + 1)..bracketEnd], out var index) ||
+                index < 0 ||
+                element.ValueKind != JsonValueKind.Array ||
+                element.GetArrayLength() <= index)
+            {
+                return false;
+            }
+
+            element = element[index];
+            bracketIndex = part.IndexOf('[', bracketEnd + 1);
+        }
+
+        return true;
+    }
+
+    private static object? ToSensorValue(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => LimitState(element.GetString() ?? string.Empty),
+            JsonValueKind.Number when element.TryGetInt64(out var longValue) => longValue,
+            JsonValueKind.Number when element.TryGetDouble(out var doubleValue) => doubleValue,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.Array or JsonValueKind.Object => LimitState(element.GetRawText()),
+            _ => null
+        };
     }
 
     private static string NormalizeDriveRoot(string value)

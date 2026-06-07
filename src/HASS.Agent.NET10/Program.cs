@@ -133,7 +133,7 @@ internal static class Program
             systemCommandService,
             CompanionRuntimeRole.App,
             log);
-        using var localApi = new LocalApiServer(settings, trayContext, mediaSessionService, log);
+        using var localApi = new LocalApiServer(settings, trayContext, log);
 
         trayContext.NotificationActionRequested += (_, args) =>
         {

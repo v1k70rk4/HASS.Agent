@@ -151,7 +151,7 @@ internal static class CompanionServiceManager
         return RunSc("delete", Quote(ServiceName));
     }
 
-    private static bool IsInstalled()
+    public static bool IsInstalled()
     {
         return ServiceController.GetServices().Any(service => service.ServiceName == ServiceName);
     }

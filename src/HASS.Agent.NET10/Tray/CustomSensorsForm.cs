@@ -149,7 +149,8 @@ internal sealed class CustomSensorsForm : Form
             {
                 CustomSensorTypes.ProcessRunning,
                 CustomSensorTypes.ServiceStatus,
-                CustomSensorTypes.DiskFree
+                CustomSensorTypes.DiskFree,
+                CustomSensorTypes.BuiltInAttribute
             }
         });
         _customGrid.Columns.Add(new DataGridViewTextBoxColumn

@@ -84,7 +84,7 @@ internal sealed class MqttSettingsForm : Form
         y += 38;
 
         AddLabel(Strings.Get("Cap.SensorInterval"), 18, y);
-        _systemSensorsInterval.Minimum = 5;
+        _systemSensorsInterval.Minimum = 10;
         _systemSensorsInterval.Maximum = 3600;
         AddControl(_systemSensorsInterval, null, 150, y - 4, 120);
         Controls.Add(new Label
@@ -129,7 +129,7 @@ internal sealed class MqttSettingsForm : Form
         _mediaPlayer.Checked = _settings.MqttMediaPlayerEnabled;
         _buttons.Checked = _settings.TrayAppCommands.Count > 0;
         _systemSensors.Checked = _settings.MqttSystemSensorsEnabled;
-        _systemSensorsInterval.Value = _settings.SystemSensorsIntervalSeconds;
+        _systemSensorsInterval.Value = _settings.FastSensorIntervalSeconds;
     }
 
     private void Save()
@@ -151,7 +151,7 @@ internal sealed class MqttSettingsForm : Form
         _settings.MqttMediaPlayerEnabled = _mediaPlayer.Checked;
         _settings.MqttButtonsEnabled = _settings.TrayAppCommands.Count > 0;
         _settings.MqttSystemSensorsEnabled = _systemSensors.Checked;
-        _settings.SystemSensorsIntervalSeconds = (int)_systemSensorsInterval.Value;
+        _settings.FastSensorIntervalSeconds = (int)_systemSensorsInterval.Value;
 
         SettingsStore.Save(_paths, _settings);
         SettingsSaved?.Invoke(this, EventArgs.Empty);

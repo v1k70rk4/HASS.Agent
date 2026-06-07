@@ -1,7 +1,6 @@
 using System.Text.Json;
 using HASS.Agent.Companion.Configuration;
 using HASS.Agent.Companion.Logging;
-using HASS.Agent.Companion.Media;
 using HASS.Agent.Companion.Runtime;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -21,15 +20,13 @@ internal sealed class LocalApiServer : IDisposable
 
     private readonly CompanionSettings _settings;
     private readonly INotificationSink _notificationSink;
-    private readonly MediaSessionService _mediaService;
     private readonly FileLog _log;
     private WebApplication? _app;
 
-    public LocalApiServer(CompanionSettings settings, INotificationSink notificationSink, MediaSessionService mediaService, FileLog log)
+    public LocalApiServer(CompanionSettings settings, INotificationSink notificationSink, FileLog log)
     {
         _settings = settings;
         _notificationSink = notificationSink;
-        _mediaService = mediaService;
         _log = log;
     }
 
@@ -60,44 +57,19 @@ internal sealed class LocalApiServer : IDisposable
                 _settings.SoftwareVersion),
             new ApiCapabilitiesResponse(
                 Notifications: true,
-                MediaPlayer: true,
+                MediaPlayer: false,
                 Buttons: false,
                 SystemSensors: false,
+                Update: true,
                 Commands: []))));
-
-        app.MapGet("/media", async () =>
-        {
-            var state = await _mediaService.GetCurrentStateAsync();
-            return Results.Json(state);
-        });
-
-        app.MapPost("/media", async (HttpContext context) =>
-        {
-            MediaCommand? command;
-            try
-            {
-                command = await JsonSerializer.DeserializeAsync<MediaCommand>(
-                    context.Request.Body,
-                    JsonOptions,
-                    context.RequestAborted);
-            }
-            catch (JsonException ex)
-            {
-                _log.Warning($"Rejected malformed media command: {ex.Message}");
-                return Results.BadRequest(new { error = "invalid_json" });
-            }
-
-            if (command is null || string.IsNullOrWhiteSpace(command.Command))
-            {
-                return Results.BadRequest(new { error = "command_required" });
-            }
-
-            await _mediaService.HandleCommandAsync(command);
-            return Results.Ok(new { status = "command_processed" });
-        });
 
         app.MapPost("/notify", async (HttpContext context) =>
         {
+            if (!IsAuthorized(context))
+            {
+                return Results.Json(new { error = "unauthorized" }, statusCode: 401);
+            }
+
             NotificationPayload? payload;
             try
             {
@@ -140,5 +112,22 @@ internal sealed class LocalApiServer : IDisposable
     public void Dispose()
     {
         StopAsync().GetAwaiter().GetResult();
+    }
+
+    private bool IsAuthorized(HttpContext context)
+    {
+        var apiKey = _settings.ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return true;
+        }
+
+        var authorization = context.Request.Headers.Authorization.ToString();
+        if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(authorization[7..].Trim(), apiKey, StringComparison.Ordinal);
+        }
+
+        return false;
     }
 }

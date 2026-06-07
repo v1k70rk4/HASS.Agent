@@ -28,12 +28,16 @@ internal static partial class Strings
             ["General.ShowStartup"] = "Show notification on startup",
             ["General.Network"] = "Network",
             ["General.CopyUrl"] = "Copy URL",
+            ["General.ApiKey"] = "API key",
+            ["General.CopyApiKey"] = "Copy key",
             ["General.Files"] = "Files",
             ["General.Settings"] = "Settings",
             ["General.Log"] = "Log",
             ["General.OpenFolder"] = "Open folder",
             ["General.Language"] = "UI language",
             ["General.HaLanguage"] = "HA entity language",
+            ["General.MqttDisabledError"] = "MQTT is not configured. The Home Assistant integration will not work.",
+            ["General.ServiceNotInstalledWarning"] = "The Windows service is not installed, so service-side commands and sensors will not run.",
 
             // MQTT page
             ["Mqtt.Title"] = "MQTT settings",
@@ -60,6 +64,9 @@ internal static partial class Strings
             ["Cap.SensorsService"] = "System sensors — service",
             ["Cap.SensorsApp"] = "System sensors — tray app",
             ["Cap.SensorInterval"] = "Sensor interval",
+            ["Cap.FastSensorInterval"] = "Fast sensors",
+            ["Cap.NormalSensorInterval"] = "Normal sensors",
+            ["Cap.HourlySensorInterval"] = "Hourly sensors",
             ["Cap.Seconds"] = "seconds",
             ["Cap.Commands"] = "System commands",
             ["Cap.WindowTitle"] = "capabilities",
@@ -79,13 +86,28 @@ internal static partial class Strings
             ["Sensors.Type"] = "Type",
             ["Sensors.Name"] = "Name",
             ["Sensors.Parameter"] = "Parameter",
+            ["Sensors.Profile"] = "Profile",
+            ["Sensors.Value"] = "Value",
             ["Sensors.Add"] = "Add",
             ["Sensors.Remove"] = "Remove",
+            ["Sensors.TestValue"] = "Test",
             ["Sensors.NewSensor"] = "New sensor",
             ["Sensors.WindowTitle"] = "sensors",
             ["Sensors.Basic"] = "Built-in sensors",
             ["Sensors.CustomAdd"] = "Add custom",
             ["Sensors.CustomRemove"] = "Remove custom",
+            ["Sensors.MultiValueTooltip"] = "This sensor has additional values. Click to add a custom sensor from an attribute.",
+            ["Sensors.AttributeSensorName"] = "{0}: {1}",
+            ["Sensors.CustomHelp"] = "Parameters: process_running = process name, service_status = Windows service name, disk_free = drive letter/path. For built-in attributes, click + on a built-in sensor; every available attribute is added with [0] for list values.",
+            ["Sensors.ValueLoading"] = "reading...",
+            ["Sensors.ValueNotTested"] = "not tested",
+            ["Sensors.ValueMissingParameter"] = "missing parameter",
+            ["Sensors.ValueError"] = "error: {0}",
+
+            ["PollingProfile.fast"] = "Fast",
+            ["PollingProfile.normal"] = "Normal",
+            ["PollingProfile.hourly"] = "Hourly",
+            ["PollingProfile.startup"] = "Startup",
 
             // Service page
             ["Service.Title"] = "Service",
@@ -102,6 +124,15 @@ internal static partial class Strings
             ["About.Version"] = "Version",
             ["About.Developer"] = "Developer",
             ["About.Description"] = "Modern .NET 10 Windows client for Home Assistant integration.",
+            ["About.ReportIssue"] = "Report issue",
+            ["About.CheckUpdates"] = "Check updates",
+            ["About.CheckingUpdates"] = "Checking...",
+            ["About.DownloadingUpdate"] = "Downloading...",
+            ["About.NoUpdates"] = "You are up to date. Latest release: {0}.",
+            ["About.UpdateAvailable"] = "A newer release is available: {0}\n\nInstalled version: {1}\n\nDownload it now?",
+            ["About.UpdateDownloaded"] = "Update downloaded to:\n{0}\n\nOpen it now?",
+            ["About.UpdateCheckFailed"] = "Unable to read the latest release from GitHub.",
+            ["About.UpdateError"] = "Update check failed: {0}",
 
             // Messages
             ["Msg.SettingsSaved"] = "Settings saved.",
@@ -110,6 +141,7 @@ internal static partial class Strings
 
             // Tray
             ["Tray.Open"] = "Open",
+            ["Tray.Service"] = "System service",
             ["Tray.CopyUrl"] = "Copy URL",
             ["Tray.Exit"] = "Exit",
             ["Tray.ServiceCommand"] = "System service command started.",
@@ -190,6 +222,6 @@ internal static partial class Strings
             ["SensorType.process_running"] = "Process running",
             ["SensorType.service_status"] = "Service status",
             ["SensorType.disk_free"] = "Disk free space",
+            ["SensorType.built_in_attribute"] = "Built-in attribute",
     };
 }
-

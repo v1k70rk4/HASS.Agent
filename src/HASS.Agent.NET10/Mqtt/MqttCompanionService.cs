@@ -16,6 +16,8 @@ namespace HASS.Agent.Companion.Mqtt;
 
 internal sealed class MqttCompanionService : IDisposable
 {
+    private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(6);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -157,6 +159,7 @@ internal sealed class MqttCompanionService : IDisposable
         {
             CancellationTokenSource? connectionCts = null;
             Task? systemSensorsTask = null;
+            Task? updateTask = null;
 
             try
             {
@@ -171,6 +174,10 @@ internal sealed class MqttCompanionService : IDisposable
                 _log.Info("MQTT connected.");
                 await SubscribeAsync(cancellationToken);
                 await PublishDiscoveryAsync();
+                if (_role == CompanionRuntimeRole.App)
+                {
+                    await PublishUpdateStateAsync();
+                }
 
                 connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
@@ -183,6 +190,13 @@ internal sealed class MqttCompanionService : IDisposable
                 {
                     systemSensorsTask = Task.Run(
                         () => PublishSystemSensorsLoopAsync(connectionCts.Token),
+                        connectionCts.Token);
+                }
+
+                if (_role == CompanionRuntimeRole.App)
+                {
+                    updateTask = Task.Run(
+                        () => PublishUpdateLoopAsync(connectionCts.Token),
                         connectionCts.Token);
                 }
 
@@ -220,6 +234,22 @@ internal sealed class MqttCompanionService : IDisposable
                     catch (Exception ex)
                     {
                         _log.Warning($"System sensor publisher stopped unexpectedly: {ex.Message}");
+                    }
+                }
+
+                if (updateTask is not null)
+                {
+                    try
+                    {
+                        await updateTask;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Expected when the MQTT connection is stopped.
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Warning($"Update state publisher stopped unexpectedly: {ex.Message}");
                     }
                 }
 
@@ -393,12 +423,13 @@ internal sealed class MqttCompanionService : IDisposable
         var buttonsEnabled = !offline && _settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0;
 
         var apis = offline
-            ? new ApiCapabilitiesResponse(false, false, false, false, [], [], [])
+            ? new ApiCapabilitiesResponse(false, false, false, false, false, [], [], [])
             : new ApiCapabilitiesResponse(
                 _settings.MqttNotificationsEnabled,
                 _settings.MqttMediaPlayerEnabled,
                 buttonsEnabled,
                 systemSensorsEnabled,
+                true,
                 buttonsEnabled ? BuildCommandDescriptors(_settings.TrayAppCommands) : [],
                 systemSensorsEnabled ? BuildCustomSensorDescriptors(serviceRole: false) : [],
                 systemSensorsEnabled ? BuildStandardSensorDescriptors(serviceRole: false) : []);
@@ -414,6 +445,11 @@ internal sealed class MqttCompanionService : IDisposable
                     _settings.SoftwareVersion),
                 apis),
             retain: _settings.MqttRetainDiscovery);
+
+        if (!offline)
+        {
+            await PublishHomeAssistantUpdateDiscoveryAsync();
+        }
     }
 
     private async Task PublishMediaStateAsync(MediaStateMessage state)
@@ -421,18 +457,101 @@ internal sealed class MqttCompanionService : IDisposable
         await PublishJsonAsync($"hass.agent/media_player/{_settings.DeviceName}/state", state, retain: false);
     }
 
+    private async Task PublishUpdateLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(UpdateCheckInterval, cancellationToken);
+            await PublishUpdateStateAsync();
+        }
+    }
+
+    private async Task PublishUpdateStateAsync()
+    {
+        var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion);
+        if (!string.IsNullOrWhiteSpace(update.Error))
+        {
+            _log.Warning($"Unable to publish update state: {update.Error}");
+        }
+
+        await PublishJsonAsync(UpdateStateTopic, update, retain: true);
+    }
+
+    private async Task PublishHomeAssistantUpdateDiscoveryAsync()
+    {
+        await PublishJsonAsync(
+            $"homeassistant/update/{SanitizeDiscoveryId(_settings.SerialNumber)}/hass_agent_net10/config",
+            new MqttUpdateDiscoveryConfig(
+                Name: $"{AppIdentity.DisplayName} Update",
+                UniqueId: $"{SanitizeDiscoveryId(_settings.SerialNumber)}_hass_agent_net10_update",
+                Device: new MqttDiscoveryDevice(
+                    Identifiers: [_settings.SerialNumber],
+                    Name: _settings.DeviceName,
+                    Manufacturer: _settings.Manufacturer,
+                    Model: _settings.Model,
+                    SoftwareVersion: _settings.SoftwareVersion),
+                StateTopic: UpdateStateTopic,
+                ValueTemplate: "{{ value_json.installed_version }}",
+                LatestVersionTopic: UpdateStateTopic,
+                LatestVersionTemplate: "{{ value_json.latest_version }}",
+                TitleTopic: UpdateStateTopic,
+                TitleTemplate: "{{ value_json.title }}",
+                ReleaseUrlTopic: UpdateStateTopic,
+                ReleaseUrlTemplate: "{{ value_json.release_url }}",
+                JsonAttributesTopic: UpdateStateTopic),
+            retain: _settings.MqttRetainDiscovery);
+    }
+
     private async Task PublishSystemSensorsLoopAsync(CancellationToken cancellationToken)
     {
-        var interval = TimeSpan.FromSeconds(_settings.SystemSensorsIntervalSeconds);
+        var intervals = new Dictionary<SensorPollingProfile, TimeSpan>
+        {
+            [SensorPollingProfile.Fast] = TimeSpan.FromSeconds(_settings.FastSensorIntervalSeconds),
+            [SensorPollingProfile.Normal] = TimeSpan.FromSeconds(_settings.NormalSensorIntervalSeconds),
+            [SensorPollingProfile.Hourly] = TimeSpan.FromSeconds(_settings.HourlySensorIntervalSeconds),
+            [SensorPollingProfile.Startup] = Timeout.InfiniteTimeSpan
+        };
+
+        var now = DateTimeOffset.UtcNow;
+        var nextDue = new Dictionary<SensorPollingProfile, DateTimeOffset>
+        {
+            [SensorPollingProfile.Fast] = now,
+            [SensorPollingProfile.Normal] = now,
+            [SensorPollingProfile.Hourly] = now,
+            [SensorPollingProfile.Startup] = now
+        };
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            now = DateTimeOffset.UtcNow;
+            var dueProfiles = nextDue
+                .Where(item => item.Value <= now)
+                .Select(item => item.Key)
+                .ToHashSet();
+
+            if (dueProfiles.Count == 0)
+            {
+                var next = nextDue.Values.Min();
+                var delay = next > now ? next - now : TimeSpan.FromSeconds(1);
+                await Task.Delay(delay, cancellationToken);
+                continue;
+            }
+
             await PublishJsonAsync(
                 $"hass.agent/sensors/{_settings.DeviceName}/state",
-                _systemMetricsService?.Read(_settings.CustomSensors, _role == CompanionRuntimeRole.Service) ?? throw new InvalidOperationException("System metrics service is not available."),
+                _systemMetricsService?.Read(_settings.CustomSensors, _role == CompanionRuntimeRole.Service, dueProfiles) ?? throw new InvalidOperationException("System metrics service is not available."),
                 retain: false);
 
-            await Task.Delay(interval, cancellationToken);
+            foreach (var profile in dueProfiles)
+            {
+                if (intervals[profile] == Timeout.InfiniteTimeSpan)
+                {
+                    nextDue[profile] = DateTimeOffset.MaxValue;
+                    continue;
+                }
+
+                nextDue[profile] = now + intervals[profile];
+            }
         }
     }
 
@@ -468,7 +587,13 @@ internal sealed class MqttCompanionService : IDisposable
             .Where(sensor => serviceRole ? sensor.Service : sensor.TrayApp)
             .Select(sensor => BuiltInSensorCatalog.Find(sensor.Key))
             .Where(sensor => sensor is not null)
-            .Select(sensor => new BuiltInSensorDescriptor(sensor!.Key, Localization.Strings.GetHa($"Sensor.{sensor.Key}")))
+            .Select(sensor => new BuiltInSensorDescriptor(
+                sensor!.Key,
+                Localization.Strings.GetHa($"Sensor.{sensor.Key}"),
+                SensorPollingProfiles.ToKey(sensor.PollingProfile),
+                sensor.HasMultipleValues,
+                sensor.DefaultAttributePath,
+                sensor.AttributePaths))
             .ToList();
     }
 
@@ -481,6 +606,7 @@ internal sealed class MqttCompanionService : IDisposable
                 sensor.Type,
                 sensor.Name,
                 sensor.Parameter,
+                SensorPollingProfiles.NormalizeKey(sensor.PollingProfile, SensorPollingProfile.Normal),
                 sensor.IsDiskFree ? "GiB" : null,
                 null,
                 sensor.IsDiskFree ? "measurement" : null,
@@ -489,6 +615,7 @@ internal sealed class MqttCompanionService : IDisposable
                     CustomSensorTypes.ProcessRunning => "mdi:application-cog",
                     CustomSensorTypes.ServiceStatus => "mdi:cog-sync",
                     CustomSensorTypes.DiskFree => "mdi:harddisk",
+                    CustomSensorTypes.BuiltInAttribute => "mdi:table-column-plus-after",
                     _ => "mdi:gauge"
                 }))
             .ToList();
@@ -530,9 +657,22 @@ internal sealed class MqttCompanionService : IDisposable
         return Encoding.UTF8.GetString(message.Payload.ToArray());
     }
 
+    private static string SanitizeDiscoveryId(string value)
+    {
+        var id = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(character => char.IsLetterOrDigit(character) ? character : '_')
+            .ToArray());
+
+        return string.IsNullOrWhiteSpace(id) ? "hass_agent_net10" : id;
+    }
+
     private string ServiceStateTopic => $"hass.agent/system/{_settings.DeviceName}/state";
 
     private string ServiceCommandTopic => $"hass.agent/system/{_settings.DeviceName}/cmd";
+
+    private string UpdateStateTopic => $"hass.agent/update/{_settings.DeviceName}/state";
 }
 
 internal sealed record MqttDiscoveryMessage(
@@ -554,3 +694,24 @@ internal sealed record MqttServiceStatusMessage(
     [property: JsonPropertyName("custom_sensors")] IReadOnlyList<CustomSensorDescriptor> CustomSensors,
     [property: JsonPropertyName("standard_sensors")] IReadOnlyList<BuiltInSensorDescriptor> StandardSensors,
     [property: JsonPropertyName("published_at")] DateTimeOffset PublishedAt);
+
+internal sealed record MqttUpdateDiscoveryConfig(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("unique_id")] string UniqueId,
+    [property: JsonPropertyName("device")] MqttDiscoveryDevice Device,
+    [property: JsonPropertyName("state_topic")] string StateTopic,
+    [property: JsonPropertyName("value_template")] string ValueTemplate,
+    [property: JsonPropertyName("latest_version_topic")] string LatestVersionTopic,
+    [property: JsonPropertyName("latest_version_template")] string LatestVersionTemplate,
+    [property: JsonPropertyName("title_topic")] string TitleTopic,
+    [property: JsonPropertyName("title_template")] string TitleTemplate,
+    [property: JsonPropertyName("release_url_topic")] string ReleaseUrlTopic,
+    [property: JsonPropertyName("release_url_template")] string ReleaseUrlTemplate,
+    [property: JsonPropertyName("json_attributes_topic")] string JsonAttributesTopic);
+
+internal sealed record MqttDiscoveryDevice(
+    [property: JsonPropertyName("identifiers")] IReadOnlyList<string> Identifiers,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("manufacturer")] string Manufacturer,
+    [property: JsonPropertyName("model")] string Model,
+    [property: JsonPropertyName("sw_version")] string SoftwareVersion);

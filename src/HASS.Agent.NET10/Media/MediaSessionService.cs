@@ -247,7 +247,8 @@ internal sealed class MediaSessionService : IDisposable
             return;
         }
 
-        if (!Uri.TryCreate(mediaUri, UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(mediaUri, UriKind.Absolute, out var uri)
+            || uri.Scheme is not "http" and not "https")
         {
             _log.Warning($"Rejected invalid playmedia URI: {mediaUri}");
             return;
