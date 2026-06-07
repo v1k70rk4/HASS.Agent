@@ -37,6 +37,18 @@ internal sealed class MqttCompanionService : IDisposable
     private Task? _worker;
     private readonly SemaphoreSlim _restartLock = new(1, 1);
 
+    // Connection state tracking — when only capabilities/sensors change,
+    // we refresh discovery without restarting the whole MQTT connection.
+    private string? _connectedHost;
+    private int _connectedPort;
+    private string? _connectedUser;
+    private string? _connectedPassword;
+    private bool _connectedTls;
+    private string? _connectedDeviceName;
+    private bool _subscribedNotifications;
+    private bool _subscribedMediaPlayer;
+    private bool _subscribedButtons;
+
     public MqttCompanionService(
         CompanionSettings settings,
         INotificationSink notificationSink,
@@ -77,12 +89,29 @@ internal sealed class MqttCompanionService : IDisposable
         await _restartLock.WaitAsync();
         try
         {
-            _log.Info("Refreshing MQTT discovery and restarting MQTT runtime.");
-            if (_client is { IsConnected: true })
+            if (!_settings.MqttEnabled)
             {
-                await PublishDiscoveryAsync(offline: !_settings.MqttEnabled);
+                if (_client is { IsConnected: true })
+                {
+                    _log.Info("MQTT disabled, publishing offline discovery.");
+                    await PublishDiscoveryAsync(offline: true);
+                }
+
+                await StopAsync(publishOffline: false);
+                return;
             }
 
+            // When only capabilities/sensors changed (not connection settings),
+            // just refresh discovery on the existing connection — no need to
+            // restart MQTT, which would briefly take the media player offline.
+            if (_client is { IsConnected: true } && !NeedsReconnect())
+            {
+                _log.Info("Refreshing MQTT discovery (connection unchanged).");
+                await PublishDiscoveryAsync();
+                return;
+            }
+
+            _log.Info("Restarting MQTT runtime.");
             await StopAsync(publishOffline: false);
             Start();
         }
@@ -90,6 +119,19 @@ internal sealed class MqttCompanionService : IDisposable
         {
             _restartLock.Release();
         }
+    }
+
+    private bool NeedsReconnect()
+    {
+        return _connectedHost != _settings.MqttHost
+            || _connectedPort != _settings.MqttPort
+            || _connectedUser != _settings.MqttUsername
+            || _connectedPassword != _settings.GetMqttPassword()
+            || _connectedTls != _settings.MqttUseTls
+            || _connectedDeviceName != _settings.DeviceName
+            || _subscribedNotifications != _settings.MqttNotificationsEnabled
+            || _subscribedMediaPlayer != _settings.MqttMediaPlayerEnabled
+            || _subscribedButtons != (_settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0);
     }
 
     public async Task PublishNotificationActionAsync(string action)
@@ -179,11 +221,29 @@ internal sealed class MqttCompanionService : IDisposable
                     await PublishUpdateStateAsync();
                 }
 
+                // Store connection state so RestartAsync can decide whether a
+                // full reconnect is needed or just a discovery refresh.
+                _connectedHost = _settings.MqttHost;
+                _connectedPort = _settings.MqttPort;
+                _connectedUser = _settings.MqttUsername;
+                _connectedPassword = _settings.GetMqttPassword();
+                _connectedTls = _settings.MqttUseTls;
+                _connectedDeviceName = _settings.DeviceName;
+                _subscribedNotifications = _settings.MqttNotificationsEnabled;
+                _subscribedMediaPlayer = _settings.MqttMediaPlayerEnabled;
+                _subscribedButtons = _settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0;
+
                 connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
                 if (_role == CompanionRuntimeRole.App && _settings.MqttMediaPlayerEnabled && _mediaSessionService is not null)
                 {
-                    await _mediaSessionService.StartAsync(PublishMediaStateAsync, connectionCts.Token);
+                    await _mediaSessionService.StartAsync(
+                        PublishMediaStateAsync,
+                        thumbnail => PublishRawAsync(
+                            $"hass.agent/media_player/{_settings.DeviceName}/thumbnail",
+                            thumbnail,
+                            retain: false),
+                        connectionCts.Token);
                 }
 
                 if (ShouldPublishSystemSensors() && _systemMetricsService is not null)
@@ -645,6 +705,23 @@ internal sealed class MqttCompanionService : IDisposable
         var message = _factory.CreateApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(JsonSerializer.Serialize(payload, JsonOptions))
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+            .WithRetainFlag(retain)
+            .Build();
+
+        await _client.PublishAsync(message);
+    }
+
+    private async Task PublishRawAsync(string topic, byte[]? payload, bool retain)
+    {
+        if (_client is not { IsConnected: true })
+        {
+            return;
+        }
+
+        var message = _factory.CreateApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(payload ?? [])
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
             .WithRetainFlag(retain)
             .Build();

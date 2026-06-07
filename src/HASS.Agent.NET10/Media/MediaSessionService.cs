@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using HASS.Agent.Companion.Logging;
 using Windows.Media.Control;
@@ -15,6 +16,8 @@ internal sealed class MediaSessionService : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _worker;
     private Func<MediaStateMessage, Task>? _publishState;
+    private Func<byte[]?, Task>? _publishThumbnail;
+    private string? _lastThumbnailHash;
 
     public MediaSessionService(FileLog log)
     {
@@ -22,7 +25,7 @@ internal sealed class MediaSessionService : IDisposable
         _audioEndpoint = new AudioEndpointService(log);
     }
 
-    public async Task StartAsync(Func<MediaStateMessage, Task> publishState, CancellationToken cancellationToken)
+    public async Task StartAsync(Func<MediaStateMessage, Task> publishState, Func<byte[]?, Task>? publishThumbnail, CancellationToken cancellationToken)
     {
         if (_worker is not null)
         {
@@ -30,6 +33,7 @@ internal sealed class MediaSessionService : IDisposable
         }
 
         _publishState = publishState;
+        _publishThumbnail = publishThumbnail;
         _sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
         _localPlayer = new MediaPlayer
         {
@@ -69,6 +73,8 @@ internal sealed class MediaSessionService : IDisposable
         _cts.Dispose();
         _cts = null;
         _worker = null;
+        _publishThumbnail = null;
+        _lastThumbnailHash = null;
         _log.Info("Media session monitor stopped.");
     }
 
@@ -187,6 +193,21 @@ internal sealed class MediaSessionService : IDisposable
                 {
                     await _publishState(message);
                 }
+
+                if (_publishThumbnail is not null)
+                {
+                    var session = GetCurrentSession();
+                    var thumbnail = session is not null ? await ReadThumbnailAsync(session) : null;
+                    var hash = thumbnail is not null
+                        ? Convert.ToHexString(SHA256.HashData(thumbnail))
+                        : null;
+
+                    if (hash != _lastThumbnailHash)
+                    {
+                        _lastThumbnailHash = hash;
+                        await _publishThumbnail(thumbnail);
+                    }
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -194,6 +215,34 @@ internal sealed class MediaSessionService : IDisposable
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        }
+    }
+
+    private async Task<byte[]?> ReadThumbnailAsync(GlobalSystemMediaTransportControlsSession session)
+    {
+        try
+        {
+            var mediaProperties = await session.TryGetMediaPropertiesAsync();
+            if (mediaProperties?.Thumbnail is not { } thumbnailRef)
+                return null;
+
+            using var stream = await thumbnailRef.OpenReadAsync();
+            var size = (uint)stream.Size;
+            if (size == 0)
+                return null;
+
+            var reader = new Windows.Storage.Streams.DataReader(stream);
+            await reader.LoadAsync(size);
+            var bytes = new byte[size];
+            reader.ReadBytes(bytes);
+            reader.DetachStream();
+            reader.Dispose();
+            return bytes;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Unable to read media thumbnail: {ex.Message}");
+            return null;
         }
     }
 
