@@ -36,6 +36,8 @@ internal sealed class MqttCompanionService : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _worker;
     private readonly SemaphoreSlim _restartLock = new(1, 1);
+    private HaWebSocketService? _haWs;
+    private bool _isOnWebSocket;
 
     // Connection state tracking — when only capabilities/sensors change,
     // we refresh discovery without restarting the whole MQTT connection.
@@ -45,6 +47,9 @@ internal sealed class MqttCompanionService : IDisposable
     private string? _connectedPassword;
     private bool _connectedTls;
     private string? _connectedDeviceName;
+    private bool _connectedHaApiEnabled;
+    private string? _connectedHaApiUrl;
+    private string? _connectedHaApiToken;
     private bool _subscribedNotifications;
     private bool _subscribedMediaPlayer;
     private bool _subscribedButtons;
@@ -74,9 +79,9 @@ internal sealed class MqttCompanionService : IDisposable
             return;
         }
 
-        if (!_settings.MqttEnabled)
+        if (!_settings.MqttEnabled && !_settings.HaApiEnabled)
         {
-            _log.Info("MQTT disabled.");
+            _log.Info("MQTT and HA API both disabled.");
             return;
         }
 
@@ -89,7 +94,7 @@ internal sealed class MqttCompanionService : IDisposable
         await _restartLock.WaitAsync();
         try
         {
-            if (!_settings.MqttEnabled)
+            if (!_settings.MqttEnabled && !_settings.HaApiEnabled)
             {
                 if (_client is { IsConnected: true })
                 {
@@ -108,6 +113,7 @@ internal sealed class MqttCompanionService : IDisposable
             {
                 _log.Info("Refreshing MQTT discovery (connection unchanged).");
                 await PublishDiscoveryAsync();
+                await PublishLegacyTopicCleanupAsync();
                 return;
             }
 
@@ -129,6 +135,9 @@ internal sealed class MqttCompanionService : IDisposable
             || _connectedPassword != _settings.GetMqttPassword()
             || _connectedTls != _settings.MqttUseTls
             || _connectedDeviceName != _settings.DeviceName
+            || _connectedHaApiEnabled != _settings.HaApiEnabled
+            || _connectedHaApiUrl != _settings.HaApiUrl
+            || _connectedHaApiToken != _settings.GetHaApiToken()
             || _subscribedNotifications != _settings.MqttNotificationsEnabled
             || _subscribedMediaPlayer != _settings.MqttMediaPlayerEnabled
             || _subscribedButtons != (_settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0);
@@ -144,8 +153,14 @@ internal sealed class MqttCompanionService : IDisposable
         var trimmedAction = action.Trim();
         _log.Info($"Publishing notification action: {trimmedAction}");
 
+        if (_isOnWebSocket && _haWs is not null)
+        {
+            await _haWs.PublishNotificationActionAsync(trimmedAction, _cts?.Token ?? CancellationToken.None);
+            return;
+        }
+
         await PublishJsonAsync(
-            $"hass.agent/notifications/{_settings.DeviceName}/actions",
+            $"hass.agent/notifications/{TopicId}/actions",
             new NotificationActionMessage(_settings.DeviceName, trimmedAction, DateTimeOffset.UtcNow, null),
             retain: false);
     }
@@ -173,6 +188,11 @@ internal sealed class MqttCompanionService : IDisposable
             await _client.DisconnectAsync();
         }
 
+        if (_haWs is not null)
+        {
+            await _haWs.DisconnectAsync();
+        }
+
         if (_worker is not null)
         {
             try
@@ -188,15 +208,48 @@ internal sealed class MqttCompanionService : IDisposable
         _cts.Dispose();
         _cts = null;
         _worker = null;
+        _isOnWebSocket = false;
     }
 
     public void Dispose()
     {
         StopAsync().GetAwaiter().GetResult();
+        _haWs?.Dispose();
     }
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
+        _haWs?.Dispose();
+        _haWs = null;
+
+        // Initialize HA WebSocket service if configured.
+        if (_settings.HaApiEnabled && !string.IsNullOrWhiteSpace(_settings.HaApiUrl))
+        {
+            _haWs = new HaWebSocketService(_settings, _log);
+            _haWs.NotificationReceived += notification => _notificationSink.ShowNotification(notification);
+            _haWs.MediaCommandReceived += command =>
+            {
+                if (_mediaSessionService is not null)
+                {
+                    _ = _mediaSessionService.HandleCommandAsync(command);
+                }
+            };
+            _haWs.ButtonCommandReceived += command =>
+            {
+                var commandName = GetSystemCommandName(command);
+                var enabled = _role == CompanionRuntimeRole.Service
+                    ? commandName is not null && _settings.IsServiceCommandEnabled(commandName)
+                    : commandName is not null && _settings.IsTrayAppCommandEnabled(commandName);
+                if (enabled)
+                {
+                    _ = _systemCommandService.HandleCommandAsync(command);
+                    return;
+                }
+
+                _log.Warning($"Unsupported {_role.Token()} WebSocket command received: {commandName ?? "(empty)"}");
+            };
+        }
+
         while (!cancellationToken.IsCancellationRequested)
         {
             CancellationTokenSource? connectionCts = null;
@@ -205,17 +258,33 @@ internal sealed class MqttCompanionService : IDisposable
 
             try
             {
+                if (!_settings.MqttEnabled)
+                {
+                    // MQTT disabled — go straight to WebSocket if available.
+                    if (_haWs is not null)
+                    {
+                        _log.Info("MQTT disabled, using HA WebSocket API as primary transport.");
+                        await RunWebSocketFailoverAsync(tryMqttReconnect: false, cancellationToken);
+                    }
+
+                    // If WS also exits, wait and retry.
+                    await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                    continue;
+                }
+
                 _client?.Dispose();
                 _client = _factory.CreateMqttClient();
                 _client.ApplicationMessageReceivedAsync += HandleMessageAsync;
 
                 var options = BuildOptions();
                 _log.Info($"Connecting MQTT to {_settings.MqttHost}:{_settings.MqttPort}.");
+                _isOnWebSocket = false;
                 await _client.ConnectAsync(options, cancellationToken);
 
                 _log.Info("MQTT connected.");
                 await SubscribeAsync(cancellationToken);
                 await PublishDiscoveryAsync();
+                await PublishLegacyTopicCleanupAsync();
                 if (_role == CompanionRuntimeRole.App)
                 {
                     await PublishUpdateStateAsync();
@@ -229,6 +298,9 @@ internal sealed class MqttCompanionService : IDisposable
                 _connectedPassword = _settings.GetMqttPassword();
                 _connectedTls = _settings.MqttUseTls;
                 _connectedDeviceName = _settings.DeviceName;
+                _connectedHaApiEnabled = _settings.HaApiEnabled;
+                _connectedHaApiUrl = _settings.HaApiUrl;
+                _connectedHaApiToken = _settings.GetHaApiToken();
                 _subscribedNotifications = _settings.MqttNotificationsEnabled;
                 _subscribedMediaPlayer = _settings.MqttMediaPlayerEnabled;
                 _subscribedButtons = _settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0;
@@ -240,7 +312,7 @@ internal sealed class MqttCompanionService : IDisposable
                     await _mediaSessionService.StartAsync(
                         PublishMediaStateAsync,
                         thumbnail => PublishRawAsync(
-                            $"hass.agent/media_player/{_settings.DeviceName}/thumbnail",
+                            $"hass.agent/media_player/{TopicId}/thumbnail",
                             thumbnail,
                             retain: false),
                         connectionCts.Token);
@@ -272,6 +344,27 @@ internal sealed class MqttCompanionService : IDisposable
             catch (Exception ex)
             {
                 _log.Warning($"MQTT connection loop failed: {ex.Message}");
+
+                // MQTT failed — try WebSocket failover if configured.
+                if (_haWs is not null && !cancellationToken.IsCancellationRequested)
+                {
+                    _log.Info("Switching to HA WebSocket API failover.");
+                    try
+                    {
+                        await RunWebSocketFailoverAsync(tryMqttReconnect: true, cancellationToken);
+                        // If we get here, MQTT reconnected — loop will retry MQTT.
+                        continue;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception wsEx)
+                    {
+                        _log.Warning($"HA WebSocket failover also failed: {wsEx.Message}");
+                    }
+                }
+
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
             }
             finally
@@ -319,6 +412,200 @@ internal sealed class MqttCompanionService : IDisposable
                     await _mediaSessionService.StopAsync();
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Runs on the WebSocket transport. Publishes discovery & sensors via HA events.
+    /// If <paramref name="tryMqttReconnect"/> is true, periodically checks if MQTT is back
+    /// and returns to let the main loop reconnect.
+    /// </summary>
+    private async Task RunWebSocketFailoverAsync(bool tryMqttReconnect, CancellationToken cancellationToken)
+    {
+        _isOnWebSocket = true;
+        await _haWs!.ConnectAsync(cancellationToken);
+        _log.Info("HA WebSocket connected as failover transport.");
+
+        using var wsCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        // Publish discovery via WebSocket.
+        await PublishDiscoveryViaWebSocketAsync(wsCts.Token);
+
+        // Start the receive loop (handles incoming commands).
+        var receiveTask = Task.Run(() => _haWs.ReceiveLoopAsync(wsCts.Token), wsCts.Token);
+
+        // Start media player on WS transport.
+        if (_role == CompanionRuntimeRole.App && _settings.MqttMediaPlayerEnabled && _mediaSessionService is not null)
+        {
+            await _mediaSessionService.StartAsync(
+                state => _haWs.PublishMediaStateAsync(state, wsCts.Token),
+                thumbnail => _haWs.PublishMediaThumbnailAsync(thumbnail, wsCts.Token),
+                wsCts.Token);
+        }
+
+        // Start sensor publishing on WS transport.
+        Task? sensorTask = null;
+        if (ShouldPublishSystemSensors() && _systemMetricsService is not null)
+        {
+            sensorTask = Task.Run(() => PublishSystemSensorsViaWebSocketLoopAsync(wsCts.Token), wsCts.Token);
+        }
+
+        try
+        {
+            if (tryMqttReconnect)
+            {
+                // Periodically try MQTT reconnection in background.
+                while (!cancellationToken.IsCancellationRequested && _haWs.IsConnected)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+
+                    if (await TryMqttPingAsync(cancellationToken))
+                    {
+                        _log.Info("MQTT broker is back online — switching back from WebSocket.");
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                // WS-only mode: just wait until connection drops or cancel.
+                while (!cancellationToken.IsCancellationRequested && _haWs.IsConnected)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            _isOnWebSocket = false;
+            await wsCts.CancelAsync();
+
+            if (sensorTask is not null)
+            {
+                try { await sensorTask; } catch (OperationCanceledException) { }
+            }
+
+            try { await receiveTask; } catch (OperationCanceledException) { }
+
+            if (_mediaSessionService is not null)
+            {
+                await _mediaSessionService.StopAsync();
+            }
+
+            await _haWs.DisconnectAsync();
+        }
+    }
+
+    private async Task PublishDiscoveryViaWebSocketAsync(CancellationToken cancellationToken)
+    {
+        var systemSensorsEnabled = _settings.MqttSystemSensorsEnabled;
+        var buttonsEnabled = _settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0;
+
+        var apis = new ApiCapabilitiesResponse(
+            _settings.MqttNotificationsEnabled,
+            _settings.MqttMediaPlayerEnabled,
+            buttonsEnabled,
+            systemSensorsEnabled,
+            true,
+            buttonsEnabled ? BuildCommandDescriptors(_settings.TrayAppCommands) : [],
+            systemSensorsEnabled ? BuildCustomSensorDescriptors(serviceRole: false) : [],
+            systemSensorsEnabled ? BuildStandardSensorDescriptors(serviceRole: false) : []);
+
+        await _haWs!.PublishDeviceDiscoveryAsync(new
+        {
+            serial_number = _settings.SerialNumber,
+            device = new
+            {
+                name = _settings.DeviceName,
+                manufacturer = _settings.Manufacturer,
+                model = _settings.Model,
+                sw_version = _settings.SoftwareVersion
+            },
+            apis
+        }, cancellationToken);
+    }
+
+    private async Task PublishSystemSensorsViaWebSocketLoopAsync(CancellationToken cancellationToken)
+    {
+        var intervals = new Dictionary<SensorPollingProfile, TimeSpan>
+        {
+            [SensorPollingProfile.Fast] = TimeSpan.FromSeconds(_settings.FastSensorIntervalSeconds),
+            [SensorPollingProfile.Normal] = TimeSpan.FromSeconds(_settings.NormalSensorIntervalSeconds),
+            [SensorPollingProfile.Hourly] = TimeSpan.FromSeconds(_settings.HourlySensorIntervalSeconds),
+            [SensorPollingProfile.Startup] = Timeout.InfiniteTimeSpan
+        };
+
+        var now = DateTimeOffset.UtcNow;
+        var nextDue = new Dictionary<SensorPollingProfile, DateTimeOffset>
+        {
+            [SensorPollingProfile.Fast] = now,
+            [SensorPollingProfile.Normal] = now,
+            [SensorPollingProfile.Hourly] = now,
+            [SensorPollingProfile.Startup] = now
+        };
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            now = DateTimeOffset.UtcNow;
+            var dueProfiles = nextDue
+                .Where(item => item.Value <= now)
+                .Select(item => item.Key)
+                .ToHashSet();
+
+            if (dueProfiles.Count == 0)
+            {
+                var next = nextDue.Values.Min();
+                var delay = next > now ? next - now : TimeSpan.FromSeconds(1);
+                await Task.Delay(delay, cancellationToken);
+                continue;
+            }
+
+            var sensorData = _systemMetricsService?.Read(
+                _settings.CustomSensors,
+                _role == CompanionRuntimeRole.Service,
+                dueProfiles);
+
+            if (sensorData is not null)
+            {
+                await _haWs!.PublishSensorStateAsync(new
+                {
+                    serial_number = _settings.SerialNumber,
+                    sensors = sensorData
+                }, cancellationToken);
+            }
+
+            foreach (var profile in dueProfiles)
+            {
+                if (intervals[profile] == Timeout.InfiniteTimeSpan)
+                {
+                    nextDue[profile] = DateTimeOffset.MaxValue;
+                    continue;
+                }
+
+                nextDue[profile] = now + intervals[profile];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tries a quick MQTT connect/disconnect to see if the broker is reachable.
+    /// Returns true if the broker responds, false otherwise.
+    /// </summary>
+    private async Task<bool> TryMqttPingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var pingClient = _factory.CreateMqttClient();
+            var options = BuildOptions();
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+            await pingClient.ConnectAsync(options, timeoutCts.Token);
+            await pingClient.DisconnectAsync();
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -377,19 +664,19 @@ internal sealed class MqttCompanionService : IDisposable
 
         if (_settings.MqttNotificationsEnabled)
         {
-            builder.WithTopicFilter($"hass.agent/notifications/{_settings.DeviceName}", MqttQualityOfServiceLevel.AtMostOnce);
+            builder.WithTopicFilter($"hass.agent/notifications/{TopicId}", MqttQualityOfServiceLevel.AtMostOnce);
             hasSubscriptions = true;
         }
 
         if (_settings.MqttMediaPlayerEnabled)
         {
-            builder.WithTopicFilter($"hass.agent/media_player/{_settings.DeviceName}/cmd", MqttQualityOfServiceLevel.AtMostOnce);
+            builder.WithTopicFilter($"hass.agent/media_player/{TopicId}/cmd", MqttQualityOfServiceLevel.AtMostOnce);
             hasSubscriptions = true;
         }
 
         if (_settings.MqttButtonsEnabled && _settings.TrayAppCommands.Count > 0)
         {
-            builder.WithTopicFilter($"hass.agent/buttons/{_settings.DeviceName}/cmd", MqttQualityOfServiceLevel.AtMostOnce);
+            builder.WithTopicFilter($"hass.agent/buttons/{TopicId}/cmd", MqttQualityOfServiceLevel.AtMostOnce);
             hasSubscriptions = true;
         }
 
@@ -409,7 +696,7 @@ internal sealed class MqttCompanionService : IDisposable
 
         try
         {
-            if (topic == $"hass.agent/notifications/{_settings.DeviceName}")
+            if (topic == $"hass.agent/notifications/{TopicId}")
             {
                 var notification = JsonSerializer.Deserialize<NotificationPayload>(payload, JsonOptions);
                 if (notification is not null && !string.IsNullOrWhiteSpace(notification.Message))
@@ -420,7 +707,7 @@ internal sealed class MqttCompanionService : IDisposable
                 return;
             }
 
-            if (topic == $"hass.agent/media_player/{_settings.DeviceName}/cmd")
+            if (topic == $"hass.agent/media_player/{TopicId}/cmd")
             {
                 var command = JsonSerializer.Deserialize<MediaCommand>(payload, JsonOptions);
                 if (command is not null && _mediaSessionService is not null)
@@ -429,7 +716,7 @@ internal sealed class MqttCompanionService : IDisposable
                 }
             }
 
-            if (topic == $"hass.agent/buttons/{_settings.DeviceName}/cmd")
+            if (topic == $"hass.agent/buttons/{TopicId}/cmd")
             {
                 var command = JsonSerializer.Deserialize<SystemCommandMessage>(payload, JsonOptions);
                 if (command is not null)
@@ -495,7 +782,7 @@ internal sealed class MqttCompanionService : IDisposable
                 systemSensorsEnabled ? BuildStandardSensorDescriptors(serviceRole: false) : []);
 
         await PublishJsonAsync(
-            $"hass.agent/devices/{_settings.DeviceName}",
+            $"hass.agent/devices/{TopicId}",
             new MqttDiscoveryMessage(
                 _settings.SerialNumber,
                 new DeviceInfoResponse(
@@ -512,9 +799,23 @@ internal sealed class MqttCompanionService : IDisposable
         }
     }
 
+    private async Task PublishLegacyTopicCleanupAsync()
+    {
+        var legacyTopicId = _settings.DeviceName;
+        if (string.IsNullOrWhiteSpace(legacyTopicId) ||
+            string.Equals(legacyTopicId, TopicId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await PublishRawAsync($"hass.agent/devices/{legacyTopicId}", null, retain: true);
+        await PublishRawAsync($"hass.agent/system/{legacyTopicId}/state", null, retain: true);
+        await PublishRawAsync($"hass.agent/update/{legacyTopicId}/state", null, retain: true);
+    }
+
     private async Task PublishMediaStateAsync(MediaStateMessage state)
     {
-        await PublishJsonAsync($"hass.agent/media_player/{_settings.DeviceName}/state", state, retain: false);
+        await PublishJsonAsync($"hass.agent/media_player/{TopicId}/state", state, retain: false);
     }
 
     private async Task PublishUpdateLoopAsync(CancellationToken cancellationToken)
@@ -598,7 +899,7 @@ internal sealed class MqttCompanionService : IDisposable
             }
 
             await PublishJsonAsync(
-                $"hass.agent/sensors/{_settings.DeviceName}/state",
+                $"hass.agent/sensors/{TopicId}/state",
                 _systemMetricsService?.Read(_settings.CustomSensors, _role == CompanionRuntimeRole.Service, dueProfiles) ?? throw new InvalidOperationException("System metrics service is not available."),
                 retain: false);
 
@@ -745,11 +1046,13 @@ internal sealed class MqttCompanionService : IDisposable
         return string.IsNullOrWhiteSpace(id) ? "hass_agent_net10" : id;
     }
 
-    private string ServiceStateTopic => $"hass.agent/system/{_settings.DeviceName}/state";
+    private string TopicId => _settings.SerialNumber;
 
-    private string ServiceCommandTopic => $"hass.agent/system/{_settings.DeviceName}/cmd";
+    private string ServiceStateTopic => $"hass.agent/system/{TopicId}/state";
 
-    private string UpdateStateTopic => $"hass.agent/update/{_settings.DeviceName}/state";
+    private string ServiceCommandTopic => $"hass.agent/system/{TopicId}/cmd";
+
+    private string UpdateStateTopic => $"hass.agent/update/{TopicId}/state";
 }
 
 internal sealed record MqttDiscoveryMessage(

@@ -36,7 +36,8 @@ internal static partial class Strings
             ["General.OpenFolder"] = "Mappa megnyitása",
             ["General.Language"] = "Program nyelv",
             ["General.HaLanguage"] = "HA entitás nyelv",
-            ["General.MqttDisabledError"] = "Az MQTT nincs beállítva. A Home Assistant integráció nem fog működni.",
+            ["General.NotConfiguredError"] = "Sem az MQTT, sem a HA API nincs beállítva! Az alkalmazás jelenleg nem szolgáltat adatot! Állíts be egy MQTT (ajánlott) vagy HA API kapcsolatot.",
+            ["General.MqttDisabledWarning"] = "Az MQTT nincs beállítva. Ha van MQTT brokered, érdemes azt is bekapcsolni.",
             ["General.ServiceNotInstalledWarning"] = "A Windows szolgáltatás nincs telepítve, ezért a service oldali parancsok és szenzorok nem fognak futni.",
 
             // MQTT page
@@ -54,15 +55,34 @@ internal static partial class Strings
             ["Mqtt.ButtonsByRoles"] = "Gombok MQTT-n (szerepkörök alapján)",
             ["Mqtt.SystemSensors"] = "Gépállapot szenzorok MQTT-n",
             ["Mqtt.HostRequired"] = "A broker cím nem lehet üres.",
-            ["Mqtt.NotConfigured"] = "Az MQTT nincs beállítva. A Home Assistant integráció nem fog működni.",
+            ["Mqtt.NotConfigured"] = "Az MQTT nincs beállítva.",
+
+            // HA API page
+            ["Nav.HaApi"] = "HA API",
+            ["HaApi.Title"] = "HA API beállítások",
+            ["HaApi.Connection"] = "Kapcsolat",
+            ["HaApi.Enable"] = "HA API engedélyezése (failover MQTT kieséskor)",
+            ["HaApi.Url"] = "Home Assistant URL",
+            ["HaApi.Token"] = "Hosszú élettartamú hozzáférési token",
+            ["HaApi.HttpWarning"] = "A HTTP nem titkosított! Csak helyi hálózaton ajánlott!",
+            ["HaApi.TestButton"] = "Kapcsolat tesztelése",
+            ["HaApi.TestSuccess"] = "Csatlakozva: Home Assistant {0}\nHASS.Agent integráció {1}",
+            ["HaApi.TestIntegrationMissing"] = "Csatlakozva: Home Assistant {0}\nA HASS.Agent integráció verziója nem ismert! Szükséges: {1}+.",
+            ["HaApi.TestIntegrationOld"] = "Csatlakozva: Home Assistant {0},\nA HASS.Agent integráció {1} túl régi! Szükséges: {2}+.",
+            ["HaApi.TestIntegrationCheckFailed"] = "Csatlakozva: Home Assistant {0}\nAz integráció verzióellenőrzése sikertelen: {1}",
+            ["HaApi.TestFailed"] = "Kapcsolat sikertelen: {0}",
+            ["HaApi.UrlRequired"] = "A Home Assistant URL nem lehet üres.",
+            ["HaApi.Description"] = "Távoli kapcsolat a Home Assistanttal WebSocket API-n keresztül.",
+            ["HaApi.Limitations"] = "MQTT-hez képest: nincs retain (újraindításkor az állapot elvész amíg az agent újra nem csatlakozik), nincs Last Will (nincs automatikus offline érzékelés), a thumbnail ~33%-kal nagyobb (base64). Távoli elérésnél HTTPS kötelező (pl. Nabu Casa).",
+            ["HaApi.DisabledWarning"] = "A HA API nincs bekapcsolva, a gép távolról nem lesz elérhető.",
 
             // Capabilities page
             ["Cap.Title"] = "Képességek",
             ["Cap.Functions"] = "Funkciók",
             ["Cap.Notifications"] = "Értesítések (tray app)",
             ["Cap.MediaPlayer"] = "Médialejátszó (tray app)",
-            ["Cap.SensorsService"] = "Rendszerszenzorok — szolgáltatás",
-            ["Cap.SensorsApp"] = "Rendszerszenzorok — tray app",
+            ["Cap.SensorsService"] = "Rendszerszenzorok (szolgáltatás)",
+            ["Cap.SensorsApp"] = "Rendszerszenzorok (tray app)",
             ["Cap.SensorInterval"] = "Szenzor frissítés",
             ["Cap.FastSensorInterval"] = "Gyors szenzorok",
             ["Cap.NormalSensorInterval"] = "Normál szenzorok",
@@ -137,7 +157,7 @@ internal static partial class Strings
             // Messages
             ["Msg.SettingsSaved"] = "Beállítások mentve.",
             ["Msg.RestartRequired"] = "A nyelv megváltoztatásához indítsd újra az alkalmazást.",
-            ["Msg.MqttNotEnabled"] = "Az MQTT nincs engedélyezve. Kattints ide a beállításhoz.",
+            ["Msg.NotConfigured"] = "Sem az MQTT, sem a HA API nincs beállítva. Kattints ide a beállításhoz.",
 
             // Tray
             ["Tray.Open"] = "Megnyitás",

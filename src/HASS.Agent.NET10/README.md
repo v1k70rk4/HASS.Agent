@@ -42,6 +42,9 @@ Default settings listen on all network interfaces, so Home Assistant can reach t
   "mqttPasswordProtected": "encrypted-by-windows",
   "mqttUseTls": false,
   "mqttRetainDiscovery": true,
+  "haApiEnabled": false,
+  "haApiUrl": "",
+  "haApiTokenProtected": "encrypted-by-windows",
   "mqttNotificationsEnabled": true,
   "mqttMediaPlayerEnabled": true,
   "mqttButtonsEnabled": true,
@@ -82,6 +85,39 @@ In the HASS.Agent integration, choose Local API setup:
 
 Only notifications are supported in Local API mode. Use MQTT for full functionality.
 
+### HA API WebSocket mode
+
+HA API mode connects from the Windows client to Home Assistant's WebSocket API. It can be used as a remote/failover transport when MQTT is unavailable.
+
+Compared to MQTT:
+
+- no retained discovery/state
+- no MQTT Last Will offline detection
+- media thumbnails are sent as base64 events
+- MQTT topics and command events are targeted by `serial_number`, so changing the display name does not break routing
+
+The connection test also reads the installed `hass_agent` integration manifest through Home Assistant's WebSocket API and warns when the integration is missing, cannot be checked, or is older than the minimum supported version.
+
+When MQTT is unavailable, the agent publishes these Home Assistant event bus events:
+
+```text
+hass_agent_device_update
+hass_agent_sensor_update
+hass_agent_media_update
+hass_agent_media_thumbnail
+hass_agent_notification_action
+```
+
+The integration sends commands back with:
+
+```json
+{
+  "serial_number": "agent-serial",
+  "command_type": "button_command",
+  "payload": {}
+}
+```
+
 ## Action Notifications
 
 Use the integration-specific action when you want buttons:
@@ -104,7 +140,7 @@ data:
 Button presses are published to:
 
 ```text
-hass.agent/notifications/{deviceName}/actions
+hass.agent/notifications/{serialNumber}/actions
 ```
 
 Payload:
@@ -156,19 +192,19 @@ Open the tray icon and go to the MQTT settings page. The password is stored with
 The app publishes:
 
 ```text
-hass.agent/devices/{deviceName}
-hass.agent/notifications/{deviceName}/actions
-hass.agent/media_player/{deviceName}/state
-hass.agent/sensors/{deviceName}/state
-hass.agent/update/{deviceName}/state
+hass.agent/devices/{serialNumber}
+hass.agent/notifications/{serialNumber}/actions
+hass.agent/media_player/{serialNumber}/state
+hass.agent/sensors/{serialNumber}/state
+hass.agent/update/{serialNumber}/state
 ```
 
 The app subscribes to:
 
 ```text
-hass.agent/notifications/{deviceName}
-hass.agent/media_player/{deviceName}/cmd
-hass.agent/buttons/{deviceName}/cmd
+hass.agent/notifications/{serialNumber}
+hass.agent/media_player/{serialNumber}/cmd
+hass.agent/buttons/{serialNumber}/cmd
 ```
 
 ## Buttons
@@ -176,7 +212,7 @@ hass.agent/buttons/{deviceName}/cmd
 When MQTT buttons are enabled, Home Assistant can send predefined command payloads to:
 
 ```text
-hass.agent/buttons/{deviceName}/cmd
+hass.agent/buttons/{serialNumber}/cmd
 ```
 
 Current buttons: `lock`, `sleep`, `monitor_off`, `volume_up`, `volume_down`, `toggle_mute`, `shutdown`, `restart`, `restart_cancel`.
@@ -217,13 +253,13 @@ Use the Service page in the settings UI to install, start, stop, or uninstall th
 The service publishes its retained online state to:
 
 ```text
-hass.agent/system/{deviceName}/state
+hass.agent/system/{serialNumber}/state
 ```
 
 When the service is online, Home Assistant routes shutdown/restart/restart_cancel commands to:
 
 ```text
-hass.agent/system/{deviceName}/cmd
+hass.agent/system/{serialNumber}/cmd
 ```
 
 If the service is not online, Home Assistant falls back to the tray app command topic.

@@ -58,13 +58,13 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
         };
     }
 
-    public void ShowMqttSetupRequired()
+    public void ShowSetupRequired()
     {
         _pendingBalloonAction = () => OpenMainForm(1);
         _notifyIcon.ShowBalloonTip(
             10_000,
             AppIdentity.DisplayName,
-            Strings.Get("Msg.MqttNotEnabled"),
+            Strings.Get("Msg.NotConfigured"),
             ToolTipIcon.Warning);
     }
 

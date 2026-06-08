@@ -30,7 +30,7 @@ internal sealed class CompanionSettings
 
     public string Model { get; set; } = AppIdentity.DisplayName;
 
-    public string SoftwareVersion { get; set; } = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.0.0";
+    public string SoftwareVersion { get; set; } = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.1.0";
 
     public bool MqttEnabled { get; set; }
 
@@ -48,6 +48,15 @@ internal sealed class CompanionSettings
     public bool MqttUseTls { get; set; }
 
     public bool MqttRetainDiscovery { get; set; } = true;
+
+    public bool HaApiEnabled { get; set; }
+
+    public string HaApiUrl { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string HaApiToken { get; set; } = string.Empty;
+
+    public string HaApiTokenProtected { get; set; } = string.Empty;
 
     public bool MqttNotificationsEnabled { get; set; } = true;
 
@@ -107,6 +116,28 @@ internal sealed class CompanionSettings
         return true;
     }
 
+    public string GetHaApiToken()
+    {
+        return ProtectedSecretStore.Unprotect(HaApiTokenProtected, SerialNumber);
+    }
+
+    public void SetHaApiToken(string token)
+    {
+        HaApiTokenProtected = ProtectedSecretStore.Protect(token, SerialNumber);
+        HaApiToken = string.Empty;
+    }
+
+    public bool MigrateHaApiPlainTextToken()
+    {
+        if (string.IsNullOrEmpty(HaApiToken))
+        {
+            return false;
+        }
+
+        SetHaApiToken(HaApiToken);
+        return true;
+    }
+
     public bool MigrateProtectedPasswordToMachineScope()
     {
         if (string.IsNullOrWhiteSpace(MqttPasswordProtected) ||
@@ -135,13 +166,10 @@ internal sealed class CompanionSettings
         }
         Manufacturer = NormalizeText(Manufacturer, "v1k70rk4");
         Model = NormalizeText(Model, AppIdentity.DisplayName);
-        SoftwareVersion = NormalizeText(SoftwareVersion, typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.0.0");
-        if (SoftwareVersion == "0.1.0")
-        {
-            SoftwareVersion = "10.0.0";
-        }
+        SoftwareVersion = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.1.0";
         MqttHost = NormalizeText(MqttHost, "homeassistant.local");
         MqttUsername = MqttUsername.Trim();
+        HaApiUrl = NormalizeUrl(HaApiUrl);
         if (Language is not "hu" and not "en") Language = "hu";
         if (HaLanguage is not "hu" and not "en") HaLanguage = "hu";
 
@@ -181,6 +209,23 @@ internal sealed class CompanionSettings
     private static string NormalizeText(string value, string fallback)
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static string NormalizeUrl(string value)
+    {
+        var url = (value ?? string.Empty).Trim().TrimEnd('/');
+        if (string.IsNullOrEmpty(url))
+        {
+            return string.Empty;
+        }
+
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            url = "http://" + url;
+        }
+
+        return url;
     }
 
     private static int NormalizeInterval(int value, int fallback, int max)

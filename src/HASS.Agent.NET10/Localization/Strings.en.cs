@@ -36,7 +36,8 @@ internal static partial class Strings
             ["General.OpenFolder"] = "Open folder",
             ["General.Language"] = "UI language",
             ["General.HaLanguage"] = "HA entity language",
-            ["General.MqttDisabledError"] = "MQTT is not configured. The Home Assistant integration will not work.",
+            ["General.NotConfiguredError"] = "Neither MQTT nor HA API is configured — the application is not sending any data. Set up an MQTT (recommended) or HA API connection.",
+            ["General.MqttDisabledWarning"] = "MQTT is not configured. If you have an MQTT broker, consider enabling it.",
             ["General.ServiceNotInstalledWarning"] = "The Windows service is not installed, so service-side commands and sensors will not run.",
 
             // MQTT page
@@ -54,7 +55,26 @@ internal static partial class Strings
             ["Mqtt.ButtonsByRoles"] = "Buttons over MQTT (based on roles)",
             ["Mqtt.SystemSensors"] = "System sensors over MQTT",
             ["Mqtt.HostRequired"] = "Broker address cannot be empty.",
-            ["Mqtt.NotConfigured"] = "MQTT is not configured. Home Assistant integration will not work.",
+            ["Mqtt.NotConfigured"] = "MQTT is not configured.",
+
+            // HA API page
+            ["Nav.HaApi"] = "HA API",
+            ["HaApi.Title"] = "HA API settings",
+            ["HaApi.Connection"] = "Connection",
+            ["HaApi.Enable"] = "Enable HA API (failover when MQTT unavailable)",
+            ["HaApi.Url"] = "Home Assistant URL",
+            ["HaApi.Token"] = "Long-lived access token",
+            ["HaApi.HttpWarning"] = "HTTP is not encrypted — only recommended on local network!",
+            ["HaApi.TestButton"] = "Test connection",
+            ["HaApi.TestSuccess"] = "Connected: Home Assistant {0}, HASS.Agent integration {1}",
+            ["HaApi.TestIntegrationMissing"] = "Connected: Home Assistant {0}, but HASS.Agent integration version is unknown. Required: {1}+.",
+            ["HaApi.TestIntegrationOld"] = "Connected: Home Assistant {0}, but HASS.Agent integration {1} is too old. Required: {2}+.",
+            ["HaApi.TestIntegrationCheckFailed"] = "Connected: Home Assistant {0}, but integration version check failed: {1}",
+            ["HaApi.TestFailed"] = "Connection failed: {0}",
+            ["HaApi.UrlRequired"] = "Home Assistant URL cannot be empty.",
+            ["HaApi.Description"] = "Remote connection to Home Assistant via WebSocket API.",
+            ["HaApi.Limitations"] = "Compared to MQTT: no retain (state is lost on restart until agent reconnects), no Last Will (no automatic offline detection), thumbnails are ~33% larger (base64). HTTPS is required for remote access (e.g. Nabu Casa).",
+            ["HaApi.DisabledWarning"] = "HA API is not enabled — the device will not be reachable remotely.",
 
             // Capabilities page
             ["Cap.Title"] = "Capabilities",
@@ -137,7 +157,7 @@ internal static partial class Strings
             // Messages
             ["Msg.SettingsSaved"] = "Settings saved.",
             ["Msg.RestartRequired"] = "Please restart the application to apply the language change.",
-            ["Msg.MqttNotEnabled"] = "MQTT is not enabled. Click here to configure.",
+            ["Msg.NotConfigured"] = "Neither MQTT nor HA API is configured. Click here to set up.",
 
             // Tray
             ["Tray.Open"] = "Open",

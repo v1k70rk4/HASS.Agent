@@ -159,9 +159,9 @@ internal static class Program
 
         mqttService.Start();
 
-        if (!settings.MqttEnabled)
+        if (!settings.MqttEnabled && !settings.HaApiEnabled)
         {
-            trayContext.ShowMqttSetupRequired();
+            trayContext.ShowSetupRequired();
         }
 
         if (settings.ShowStartupNotification)

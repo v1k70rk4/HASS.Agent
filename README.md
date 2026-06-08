@@ -2,7 +2,7 @@
 
 ![Windows](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![Version](https://img.shields.io/badge/version-10.0.0-brightgreen)
+![Version](https://img.shields.io/badge/version-10.1.0-brightgreen)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT%20%2B%20Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -45,6 +45,21 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
 ---
 
 ## What Changed
+
+### 10.1.0
+
+- Added Home Assistant WebSocket API transport for MQTT failover and MQTT-free remote control.
+- Added HA API settings, connection testing, HTTP warning tooltip, and setup status banners.
+- Added HA API cross-check for the installed HASS.Agent Home Assistant integration version.
+- Added Home Assistant update entity publishing and About-page update checks.
+- Added multi-value built-in sensor attributes and one-click custom sensor generation.
+- Added per-sensor polling profiles: fast, normal, hourly, and startup.
+- Added custom sensor value testing without blocking the settings UI.
+- Improved Windows Update pending detection and release lookup.
+- Improved service/MQTT setup warnings, About page actions, and tray service labeling.
+- Switched MQTT topic routing and HA API command targeting to `serial_number` so device renames do not break commands.
+
+### 10.0.0
 
 - Rebuilt the companion client as a modern `.NET 10` Windows app.
 - Added a Windows tray app for interactive user-session features.
@@ -414,22 +429,22 @@ The integration supports two connection modes:
 Published by the agent:
 
 ```text
-hass.agent/devices/{deviceName}                     # discovery + capabilities
-hass.agent/system/{deviceName}/state                # service online state
-hass.agent/sensors/{deviceName}/state               # sensor values
-hass.agent/update/{deviceName}/state                # app update state
-hass.agent/media_player/{deviceName}/state          # media player state
-hass.agent/notifications/{deviceName}/actions       # notification action events
+hass.agent/devices/{serialNumber}                   # discovery + capabilities
+hass.agent/system/{serialNumber}/state              # service online state
+hass.agent/sensors/{serialNumber}/state             # sensor values
+hass.agent/update/{serialNumber}/state              # app update state
+hass.agent/media_player/{serialNumber}/state        # media player state
+hass.agent/notifications/{serialNumber}/actions     # notification action events
 homeassistant/update/{serial}/hass_agent_net10/config  # HA update entity discovery
 ```
 
 Subscribed by the agent:
 
 ```text
-hass.agent/notifications/{deviceName}               # incoming notifications
-hass.agent/media_player/{deviceName}/cmd            # media player commands
-hass.agent/buttons/{deviceName}/cmd                 # system command buttons
-hass.agent/system/{deviceName}/cmd                  # service-routed commands
+hass.agent/notifications/{serialNumber}             # incoming notifications
+hass.agent/media_player/{serialNumber}/cmd          # media player commands
+hass.agent/buttons/{serialNumber}/cmd               # system command buttons
+hass.agent/system/{serialNumber}/cmd                # service-routed commands
 ```
 
 ---

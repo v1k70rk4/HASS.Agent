@@ -46,7 +46,8 @@ internal sealed class MainForm : Form
     private readonly CheckBox _showStartup = new();
     private readonly ComboBox _langCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _haLangCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Label _generalMqttError = new();
+    private readonly Label _generalNotConfiguredError = new();
+    private readonly Label _generalMqttWarning = new();
     private readonly Label _generalServiceWarning = new();
     private Control? _generalDeviceCard;
     private Control? _generalNetworkCard;
@@ -63,6 +64,13 @@ internal sealed class MainForm : Form
     private readonly TextBox _mqttPass = new() { UseSystemPasswordChar = true };
     private readonly CheckBox _mqttTls = new();
     private readonly CheckBox _mqttRetain = new();
+
+    private readonly CheckBox _haApiEnabled = new();
+    private readonly TextBox _haApiUrl = new();
+    private readonly TextBox _haApiToken = new() { UseSystemPasswordChar = true };
+    private readonly Label _haApiHttpWarningIcon = new();
+    private readonly Label _haApiTestResult = new();
+    private readonly Label _haApiDisabledWarning = new();
 
     private readonly CheckBox _capNotify = new();
     private readonly CheckBox _capMedia = new();
@@ -106,6 +114,7 @@ internal sealed class MainForm : Form
 
         _content.Controls.Add(BuildGeneralPage());
         _content.Controls.Add(BuildMqttPage());
+        _content.Controls.Add(BuildHaApiPage());
         _content.Controls.Add(BuildCapabilitiesPage());
         _content.Controls.Add(BuildSensorsPage());
         _content.Controls.Add(BuildServicePage());
@@ -168,7 +177,7 @@ internal sealed class MainForm : Form
         };
 
         var navContainer = new Panel { Dock = DockStyle.Fill, BackColor = SidebarBg };
-        string[] navKeys = ["Nav.General", "Nav.Mqtt", "Nav.Capabilities", "Nav.Sensors", "Nav.Service", "Nav.About"];
+        string[] navKeys = ["Nav.General", "Nav.Mqtt", "Nav.HaApi", "Nav.Capabilities", "Nav.Sensors", "Nav.Service", "Nav.About"];
         for (var i = 0; i < navKeys.Length; i++)
             navContainer.Controls.Add(CreateNavItem(S(navKeys[i]), i));
 
@@ -260,16 +269,22 @@ internal sealed class MainForm : Form
         AddPageTitle(page, S("General.Title"));
 
         ConfigureStatusLabel(
-            _generalMqttError,
-            "⚠  " + S("General.MqttDisabledError"),
+            _generalNotConfiguredError,
+            "⚠  " + S("General.NotConfiguredError"),
             Color.FromArgb(153, 27, 27),
             Color.White);
+        ConfigureStatusLabel(
+            _generalMqttWarning,
+            "⚠  " + S("General.MqttDisabledWarning"),
+            Color.FromArgb(255, 243, 224),
+            Color.FromArgb(180, 60, 0));
         ConfigureStatusLabel(
             _generalServiceWarning,
             "⚠  " + S("General.ServiceNotInstalledWarning"),
             Color.FromArgb(255, 243, 224),
             Color.FromArgb(180, 60, 0));
-        page.Controls.Add(_generalMqttError);
+        page.Controls.Add(_generalNotConfiguredError);
+        page.Controls.Add(_generalMqttWarning);
         page.Controls.Add(_generalServiceWarning);
         page.Layout += (_, _) => LayoutGeneralStatusMessages();
 
@@ -369,8 +384,8 @@ internal sealed class MainForm : Form
         ConfigureStatusLabel(
             _mqttWarning,
             "⚠  " + S("Mqtt.NotConfigured"),
-            Color.FromArgb(153, 27, 27),
-            Color.White);
+            Color.FromArgb(255, 243, 224),
+            Color.FromArgb(180, 60, 0));
         _mqttWarning.Location = Pt(28, 56);
         _mqttWarning.Size = Sz(600, 34);
         _mqttWarning.Visible = !_settings.MqttEnabled;
@@ -378,12 +393,21 @@ internal sealed class MainForm : Form
 
         var cardTop = _settings.MqttEnabled ? 56 : 96;
         var card = MakeCard(page, 28, cardTop, 600, 308, S("Mqtt.Connection"));
+        void LayoutMqttPage()
+        {
+            _mqttWarning.Location = Pt(28, 56);
+            _mqttWarning.Size = new Size(card.Width, D(34));
+            card.Top = _mqttWarning.Visible ? D(96) : D(56);
+            _mqttWarning.BringToFront();
+        }
+
+        page.Layout += (_, _) => LayoutMqttPage();
         var y = 44;
         y = AddCheck(card, _mqttEnabled, S("Mqtt.Enable"), y);
         _mqttEnabled.CheckedChanged += (_, _) =>
         {
             _mqttWarning.Visible = !_mqttEnabled.Checked;
-            card.Location = Pt(28, _mqttEnabled.Checked ? 56 : 96);
+            LayoutMqttPage();
         };
         y += 6;
         y = AddField(card, S("Mqtt.BrokerHost"), _mqttHost, y);
@@ -395,6 +419,185 @@ internal sealed class MainForm : Form
         AddCheck(card, _mqttRetain, S("Mqtt.RetainDiscovery"), y);
 
         return page;
+    }
+
+    private Panel BuildHaApiPage()
+    {
+        var page = MakePage();
+
+        AddPageTitle(page, S("HaApi.Title"));
+
+        // Warning when HA API is disabled
+        ConfigureStatusLabel(
+            _haApiDisabledWarning,
+            "⚠  " + S("HaApi.DisabledWarning"),
+            Color.FromArgb(255, 243, 224),
+            Color.FromArgb(180, 60, 0));
+        _haApiDisabledWarning.Location = Pt(28, 56);
+        _haApiDisabledWarning.Size = Sz(600, 34);
+        _haApiDisabledWarning.Visible = !_settings.HaApiEnabled;
+        page.Controls.Add(_haApiDisabledWarning);
+
+        // Description
+        var descLabel = new Label
+        {
+            Text = "ℹ  " + S("HaApi.Description"),
+            Font = new Font("Segoe UI", 9.5F),
+            ForeColor = Color.FromArgb(21, 128, 61),
+            BackColor = Color.FromArgb(220, 252, 231),
+            AutoSize = false,
+            Location = Pt(28, _haApiDisabledWarning.Visible ? 98 : 56),
+            Size = Sz(600, 32),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(D(12), 0, D(12), 0),
+        };
+        page.Controls.Add(descLabel);
+
+        Label limLabel = null!;
+        var cardTop = _haApiDisabledWarning.Visible ? 138 : 96;
+        var card = MakeCard(page, 28, cardTop, 600, 300, S("HaApi.Connection"));
+        void LayoutHaApiPage()
+        {
+            _haApiDisabledWarning.Location = Pt(28, 56);
+            _haApiDisabledWarning.Size = new Size(card.Width, D(34));
+            descLabel.Location = Pt(28, _haApiDisabledWarning.Visible ? 98 : 56);
+            descLabel.Size = new Size(card.Width, D(32));
+            card.Top = _haApiDisabledWarning.Visible ? D(138) : D(96);
+            _haApiHttpWarningIcon.Location = new Point(_haApiUrl.Right + D(8), _haApiUrl.Top);
+            _haApiTestResult.Width = Math.Max(D(220), card.ClientSize.Width - D(208));
+            if (limLabel is not null)
+            {
+                limLabel.Location = new Point(D(28), card.Bottom + D(8));
+                limLabel.Size = new Size(card.Width, D(44));
+                limLabel.BringToFront();
+            }
+
+            _haApiDisabledWarning.BringToFront();
+            descLabel.BringToFront();
+        }
+
+        page.Layout += (_, _) => LayoutHaApiPage();
+        var y = 44;
+        y = AddCheck(card, _haApiEnabled, S("HaApi.Enable"), y);
+        _haApiEnabled.CheckedChanged += (_, _) =>
+        {
+            _haApiDisabledWarning.Visible = !_haApiEnabled.Checked;
+            LayoutHaApiPage();
+        };
+        y += 6;
+        y = AddField(card, S("HaApi.Url"), _haApiUrl, y);
+
+        var httpWarningTip = new ToolTip
+        {
+            AutomaticDelay = 150,
+            AutoPopDelay = 8000,
+            InitialDelay = 150,
+            ReshowDelay = 100,
+            ShowAlways = true
+        };
+        _haApiHttpWarningIcon.Text = "⚠";
+        _haApiHttpWarningIcon.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+        _haApiHttpWarningIcon.ForeColor = Color.FromArgb(180, 60, 0);
+        _haApiHttpWarningIcon.BackColor = Color.Transparent;
+        _haApiHttpWarningIcon.AutoSize = false;
+        _haApiHttpWarningIcon.Size = Sz(28, 28);
+        _haApiHttpWarningIcon.Location = new Point(_haApiUrl.Right + D(8), _haApiUrl.Top);
+        _haApiHttpWarningIcon.TextAlign = ContentAlignment.MiddleCenter;
+        _haApiHttpWarningIcon.Cursor = Cursors.Help;
+        _haApiHttpWarningIcon.Visible = false;
+        httpWarningTip.SetToolTip(_haApiHttpWarningIcon, S("HaApi.HttpWarning"));
+        httpWarningTip.SetToolTip(_haApiUrl, S("HaApi.HttpWarning"));
+        card.Controls.Add(_haApiHttpWarningIcon);
+
+        _haApiUrl.TextChanged += (_, _) =>
+        {
+            var url = _haApiUrl.Text.Trim();
+            _haApiHttpWarningIcon.Visible = url.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+        };
+
+        y += 4;
+        y = AddField(card, S("HaApi.Token"), _haApiToken, y);
+        y += 6;
+
+        var testBtn = MakeSecondaryButton(S("HaApi.TestButton"), 160, 32);
+        testBtn.Location = Pt(20, y);
+        testBtn.Click += async (_, _) => await TestHaApiConnectionAsync();
+        card.Controls.Add(testBtn);
+
+        _haApiTestResult.Location = Pt(188, y);
+        _haApiTestResult.Size = Sz(380, 46);
+        _haApiTestResult.ForeColor = TextMuted;
+        _haApiTestResult.Font = new Font("Segoe UI", 9F);
+        _haApiTestResult.TextAlign = ContentAlignment.MiddleLeft;
+        card.Controls.Add(_haApiTestResult);
+
+        limLabel = new Label
+        {
+            Text = "⚠  " + S("HaApi.Limitations"),
+            Font = new Font("Segoe UI", 8.5F),
+            ForeColor = Color.FromArgb(120, 90, 0),
+            BackColor = Color.FromArgb(255, 251, 235),
+            AutoSize = false,
+            Location = Pt(28, card.Bottom + D(8)),
+            Size = Sz(600, 44),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(D(12), 0, D(12), 0),
+        };
+        page.Controls.Add(limLabel);
+        LayoutHaApiPage();
+
+        return page;
+    }
+
+    private async Task TestHaApiConnectionAsync()
+    {
+        var url = _haApiUrl.Text.Trim();
+        var token = _haApiToken.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            _haApiTestResult.ForeColor = Color.FromArgb(153, 27, 27);
+            _haApiTestResult.Text = S("HaApi.UrlRequired");
+            return;
+        }
+
+        _haApiTestResult.ForeColor = TextMuted;
+        _haApiTestResult.Text = "...";
+
+        try
+        {
+            using var testWs = new Mqtt.HaWebSocketService(_settings, _log);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var result = await testWs.TestConnectionAsync(url, token, cts.Token);
+            if (!string.IsNullOrWhiteSpace(result.IntegrationVersionError))
+            {
+                _haApiTestResult.ForeColor = Color.FromArgb(194, 65, 12);
+                _haApiTestResult.Text = string.Format(S("HaApi.TestIntegrationCheckFailed"), result.HomeAssistantVersion, result.IntegrationVersionError);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(result.IntegrationVersion))
+            {
+                _haApiTestResult.ForeColor = Color.FromArgb(194, 65, 12);
+                _haApiTestResult.Text = string.Format(S("HaApi.TestIntegrationMissing"), result.HomeAssistantVersion, Mqtt.HaWebSocketService.MinimumIntegrationVersion);
+                return;
+            }
+
+            if (!Mqtt.HaWebSocketService.IsIntegrationVersionSupported(result.IntegrationVersion))
+            {
+                _haApiTestResult.ForeColor = Color.FromArgb(194, 65, 12);
+                _haApiTestResult.Text = string.Format(S("HaApi.TestIntegrationOld"), result.HomeAssistantVersion, result.IntegrationVersion, Mqtt.HaWebSocketService.MinimumIntegrationVersion);
+                return;
+            }
+
+            _haApiTestResult.ForeColor = Color.FromArgb(21, 128, 61);
+            _haApiTestResult.Text = string.Format(S("HaApi.TestSuccess"), result.HomeAssistantVersion, result.IntegrationVersion);
+        }
+        catch (Exception ex)
+        {
+            _haApiTestResult.ForeColor = Color.FromArgb(153, 27, 27);
+            _haApiTestResult.Text = string.Format(S("HaApi.TestFailed"), ex.Message);
+        }
     }
 
     private void ConfigureStatusLabel(Label label, string text, Color background, Color foreground)
@@ -411,7 +614,9 @@ internal sealed class MainForm : Form
 
     private void UpdateGeneralStatusMessages()
     {
-        _generalMqttError.Visible = !_settings.MqttEnabled;
+        var neitherConfigured = !_settings.MqttEnabled && !_settings.HaApiEnabled;
+        _generalNotConfiguredError.Visible = neitherConfigured;
+        _generalMqttWarning.Visible = !neitherConfigured && !_settings.MqttEnabled;
         _generalServiceWarning.Visible = !IsServiceInstalled();
         LayoutGeneralStatusMessages();
     }
@@ -438,7 +643,7 @@ internal sealed class MainForm : Form
     {
         var y = D(56);
         var statusWidth = _generalDeviceCard?.Width ?? D(720);
-        foreach (var label in new[] { _generalMqttError, _generalServiceWarning })
+        foreach (var label in new[] { _generalNotConfiguredError, _generalMqttWarning, _generalServiceWarning })
         {
             if (!label.Visible)
             {
@@ -993,6 +1198,10 @@ internal sealed class MainForm : Form
         _mqttTls.Checked = _settings.MqttUseTls;
         _mqttRetain.Checked = _settings.MqttRetainDiscovery;
 
+        _haApiEnabled.Checked = _settings.HaApiEnabled;
+        _haApiUrl.Text = _settings.HaApiUrl;
+        _haApiToken.Text = _settings.GetHaApiToken();
+
         _capNotify.Checked = _settings.MqttNotificationsEnabled;
         _capMedia.Checked = _settings.MqttMediaPlayerEnabled;
         _capSensorsService.Checked = _settings.MqttServiceSystemSensorsEnabled;
@@ -1241,6 +1450,10 @@ internal sealed class MainForm : Form
         _settings.SetMqttPassword(_mqttPass.Text);
         _settings.MqttUseTls = _mqttTls.Checked;
         _settings.MqttRetainDiscovery = _mqttRetain.Checked;
+
+        _settings.HaApiEnabled = _haApiEnabled.Checked;
+        _settings.HaApiUrl = _haApiUrl.Text.Trim();
+        _settings.SetHaApiToken(_haApiToken.Text);
 
         _settings.MqttNotificationsEnabled = _capNotify.Checked;
         _settings.MqttMediaPlayerEnabled = _capMedia.Checked;

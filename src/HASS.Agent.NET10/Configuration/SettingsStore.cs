@@ -28,8 +28,9 @@ internal static class SettingsStore
         settings.Normalize();
         var migratedPassword = settings.MigratePlainTextPassword();
         var migratedPasswordScope = settings.MigrateProtectedPasswordToMachineScope();
+        var migratedHaApiToken = settings.MigrateHaApiPlainTextToken();
         var normalizedJson = Serialize(settings);
-        if (originalJson is null || migratedPassword || migratedPasswordScope || !JsonEquals(originalJson, normalizedJson))
+        if (originalJson is null || migratedPassword || migratedPasswordScope || migratedHaApiToken || !JsonEquals(originalJson, normalizedJson))
         {
             Write(paths, normalizedJson);
         }
@@ -42,6 +43,10 @@ internal static class SettingsStore
         if (migratedPasswordScope)
         {
             log.Info("Migrated MQTT password to machine protected storage for service access.");
+        }
+        if (migratedHaApiToken)
+        {
+            log.Info("Migrated HA API token to Windows protected storage.");
         }
 
         return settings;
