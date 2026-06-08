@@ -522,8 +522,11 @@ The setup package is built with [Inno Setup](https://jrsoftware.org/isinfo.php).
 - **Desktop icon** (optional)
 - **Start automatically on login** (default: enabled, sets a registry Run key)
 - **Install system service** (optional)
+- **Clean install** (removes existing settings, API key, and log files — useful for a fresh start)
 
-During upgrades the installer stops the running tray app, stops the system service if installed, replaces the files, reinstalls/starts the service, and restarts the tray app if it was running before the upgrade.
+The installer automatically configures a **Windows Firewall** rule (Private profile, TCP port 5115) for the Local HTTP API, so manual firewall setup is not needed.
+
+During upgrades the installer stops the running tray app, stops the system service if installed, replaces the files, reinstalls/starts the service, and restarts the tray app. On uninstall the firewall rule is removed automatically.
 
 ---
 
@@ -562,7 +565,9 @@ This repository includes a Windows GitHub Actions workflow:
 
 ## Windows Firewall
 
-The agent's Local HTTP API listens on TCP port `5115`. If you use the Local HTTP API integration mode, allow Home Assistant to reach it from your local network:
+> **Note**: If you used the installer, the firewall rule is already configured automatically. This section is only needed for manual (non-installer) setups.
+
+The agent's Local HTTP API listens on TCP port `5115`. If you run the app without the installer, allow Home Assistant to reach it from your local network:
 
 ```powershell
 New-NetFirewallRule `
