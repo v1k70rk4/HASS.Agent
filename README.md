@@ -80,7 +80,7 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
 - x64 Windows
 - Home Assistant with **MQTT broker** (recommended, e.g. Mosquitto) **or HA API** (WebSocket, e.g. via Nabu Casa)
 - The companion Home Assistant integration:
-  [v1k70rk4/HASS.Agent-Integration](https://github.com/v1k70rk4/HASS.Agent-Integration)
+  [v1k70rk4/HASS.Agent.NET10-Integration](https://github.com/v1k70rk4/HASS.Agent.NET10-Integration)
 
 Windows versions older than Windows 10 2004 are intentionally blocked. The app targets `net10.0-windows10.0.19041.0` and uses modern Windows APIs for notifications, media sessions, services, sensors, and desktop state.
 
@@ -89,7 +89,7 @@ If you download a published self-contained build, you do **not** need to install
 ## Quick Start
 
 1. Install the Home Assistant integration:
-   [v1k70rk4/HASS.Agent-Integration](https://github.com/v1k70rk4/HASS.Agent-Integration)
+   [v1k70rk4/HASS.Agent.NET10-Integration](https://github.com/v1k70rk4/HASS.Agent.NET10-Integration)
 2. Download a release build or the installer from [Releases](https://github.com/v1k70rk4/HASS.Agent/releases), or build from source.
 3. Run the installer or start `HASS.Agent.NET10.exe` directly.
 4. Open the tray icon and go to settings.
@@ -403,7 +403,7 @@ Parameter: last_shutdown_reason.reason
 
 Install the companion custom integration:
 
-[v1k70rk4/HASS.Agent-Integration](https://github.com/v1k70rk4/HASS.Agent-Integration)
+[v1k70rk4/HASS.Agent.NET10-Integration](https://github.com/v1k70rk4/HASS.Agent.NET10-Integration)
 
 The integration creates Home Assistant entities dynamically based on the agent's advertised capabilities.
 
