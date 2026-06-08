@@ -3,14 +3,14 @@
 ![Windows](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![Version](https://img.shields.io/badge/version-10.1.0-brightgreen)
-![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT%20%2B%20Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)
+![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT%20%7C%20WebSocket%20API-41BDF5?logo=homeassistant&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 <img src="images/hass_agent_companion_modern_icon.png" align="right" width="128" alt="HASS.Agent .NET10 icon">
 
 A modern Windows companion app for Home Assistant.
 
-This fork refreshes the classic HASS.Agent idea into **HASS.Agent .NET10**, a lightweight .NET 10 client built for current Windows desktops. The original client was a .NET 6-era application; this version focuses on a smaller, cleaner runtime, MQTT-first Home Assistant integration, Windows 11-friendly UX, and a split tray app/system service model.
+This fork refreshes the classic HASS.Agent idea into **HASS.Agent .NET10**, a lightweight .NET 10 client built for current Windows desktops. The original client was a .NET 6-era application; this version focuses on a smaller, cleaner runtime, Home Assistant integration via MQTT or WebSocket API, Windows 11-friendly UX, and a split tray app/system service model.
 
 It is designed for Windows PCs you want to observe and control from Home Assistant: media playback, notifications, sensors, shutdown/restart, command buttons, and rich machine state.
 
@@ -34,9 +34,10 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
   - [Sensor Polling Profiles](#sensor-polling-profiles)
   - [Custom Sensors](#custom-sensors)
 - [Home Assistant Integration](#home-assistant-integration)
-  - [MQTT Mode vs Local API Mode](#mqtt-mode-vs-local-api-mode)
+  - [Connection Modes](#connection-modes)
   - [MQTT Topics](#mqtt-topics)
-- [Local API and Security](#local-api-and-security)
+  - [HA API WebSocket Events](#ha-api-websocket-events)
+- [Local HTTP API](#local-http-api)
 - [Installer](#installer)
 - [Build from Source](#build-from-source)
 - [Windows Firewall](#windows-firewall)
@@ -77,7 +78,7 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
 - Windows 10 version 2004 / build 19041 or newer
 - Windows 11 recommended
 - x64 Windows
-- Home Assistant with MQTT broker (Mosquitto or similar)
+- Home Assistant with **MQTT broker** (recommended, e.g. Mosquitto) **or HA API** (WebSocket, e.g. via Nabu Casa)
 - The companion Home Assistant integration:
   [v1k70rk4/HASS.Agent-Integration](https://github.com/v1k70rk4/HASS.Agent-Integration)
 
@@ -93,10 +94,11 @@ If you download a published self-contained build, you do **not** need to install
 3. Run the installer or start `HASS.Agent.NET10.exe` directly.
 4. Open the tray icon and go to settings.
 5. On the **MQTT** page, enable MQTT and enter your broker address and credentials.
+   Alternatively, on the **HA API** page, enable the WebSocket connection to Home Assistant (useful for remote access via Nabu Casa or when no MQTT broker is available).
 6. On the **Capabilities** page, choose which features are handled by the tray app vs. the service.
 7. On the **Sensors** page, enable built-in sensors and add custom sensors.
 8. Optionally install the Windows service from the **Service** page.
-9. The device appears automatically in Home Assistant via MQTT discovery.
+9. The device appears automatically in Home Assistant.
 
 <p align="center"><img src="images/ui_general.png" width="700" alt="General settings page"></p>
 
@@ -129,7 +131,7 @@ Button presses are published to MQTT and appear as an event entity in Home Assis
 
 ### Media Player
 
-Expose the active Windows media session to Home Assistant as a `media_player` entity (MQTT only):
+Expose the active Windows media session to Home Assistant as a `media_player` entity:
 
 - current title, artist, album
 - play / pause / stop
@@ -405,24 +407,29 @@ Install the companion custom integration:
 
 The integration creates Home Assistant entities dynamically based on the agent's advertised capabilities.
 
-### MQTT Mode vs Local API Mode
+### Connection Modes
 
-The integration supports two connection modes:
+The agent supports three connection modes. You can use MQTT and HA API together — HA API acts as an automatic failover when the MQTT broker is unreachable.
 
-| Feature | MQTT mode | Local API mode |
-|---------|:---------:|:--------------:|
-| Notifications | yes | yes |
-| Media player | yes | |
-| Notification action events | yes | |
-| System sensors | yes | |
-| Command buttons | yes | |
-| Update entity | yes | |
-| Auto-discovery | yes | |
-| Service integration | yes | |
+| Feature | MQTT | HA API (WebSocket) | Local HTTP API |
+|---------|:----:|:------------------:|:--------------:|
+| Notifications | yes | yes | yes |
+| Media player | yes | yes | |
+| Notification action events | yes | yes | |
+| System sensors | yes | yes | |
+| Command buttons | yes | yes | |
+| Update entity | yes | yes | |
+| Auto-discovery | yes | yes | |
+| Service integration | yes | | |
+| Retained state on restart | yes | | |
+| Last Will (offline detection) | yes | | |
+| Remote access (Nabu Casa) | | yes | |
 
-**MQTT mode is recommended.** The device is discovered automatically when MQTT is enabled in the agent. All features work.
+**MQTT** (recommended) — The device is discovered automatically via MQTT discovery. All features work. Requires an MQTT broker on the local network (e.g. Mosquitto). If you use Zigbee2MQTT, you already have one.
 
-**Local API mode** is a fallback for environments where MQTT is not available. Only notifications are supported. Setup requires entering the agent's IP address, port, and API key manually.
+**HA API (WebSocket)** — The agent connects directly to Home Assistant's WebSocket API using a long-lived access token. Works remotely (e.g. via Nabu Casa) without an MQTT broker. Almost all features work, with some trade-offs: no retained state (sensor values are lost until the agent reconnects after a restart), no MQTT Last Will (no automatic offline detection), and media thumbnails are ~33% larger (base64 encoding). HTTPS is required for remote access.
+
+**Local HTTP API** — A minimal fallback. The agent runs a small HTTP server that Home Assistant connects to. Only notifications are supported. Requires manual setup (IP address, port, API key). Use MQTT or HA API instead for full functionality.
 
 ### MQTT Topics
 
@@ -447,11 +454,37 @@ hass.agent/buttons/{serialNumber}/cmd               # system command buttons
 hass.agent/system/{serialNumber}/cmd                # service-routed commands
 ```
 
+### HA API WebSocket Events
+
+When using HA API mode, the agent communicates through Home Assistant's event bus instead of MQTT topics.
+
+Events fired by the agent:
+
+```text
+hass_agent_device_update          # discovery + capabilities
+hass_agent_sensor_update          # sensor values
+hass_agent_media_update           # media player state
+hass_agent_media_thumbnail        # media thumbnail (base64)
+hass_agent_notification_action    # notification button press
+```
+
+Commands sent by the integration to the agent:
+
+```json
+{
+  "serial_number": "agent-serial",
+  "command_type": "notification | media_command | button_command",
+  "payload": { }
+}
+```
+
+All events and commands are targeted by `serial_number`, so renaming the device in Home Assistant does not break routing.
+
 ---
 
-## Local API and Security
+## Local HTTP API
 
-The agent runs a lightweight HTTP server for the Local API integration mode.
+The agent runs a lightweight HTTP server on port `5115`. This is used by the Local HTTP API integration mode and for device info.
 
 **Endpoints:**
 
@@ -460,7 +493,7 @@ The agent runs a lightweight HTTP server for the Local API integration mode.
 | `GET` | `/info` | | Device info and capabilities |
 | `POST` | `/notify` | Bearer | Send a notification |
 
-The `POST /notify` endpoint requires an API key via the `Authorization: Bearer <key>` header. The key is auto-generated on first launch and displayed on the **General** settings page under **Network**. Copy it from there when setting up the Local API integration in Home Assistant.
+The `POST /notify` endpoint requires an API key via the `Authorization: Bearer <key>` header. The key is auto-generated on first launch and displayed on the **General** settings page under **Network**. Copy it from there when setting up the Local HTTP API integration in Home Assistant.
 
 ```powershell
 # Test from the local machine
@@ -529,7 +562,7 @@ This repository includes a Windows GitHub Actions workflow:
 
 ## Windows Firewall
 
-The app listens on TCP port `5115`. Allow Home Assistant to reach it from your local network:
+The agent's Local HTTP API listens on TCP port `5115`. If you use the Local HTTP API integration mode, allow Home Assistant to reach it from your local network:
 
 ```powershell
 New-NetFirewallRule `

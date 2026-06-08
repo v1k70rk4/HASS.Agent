@@ -55,9 +55,9 @@ Default settings listen on all network interfaces, so Home Assistant can reach t
 }
 ```
 
-## Local API
+## Local HTTP API
 
-The local HTTP API is used by the Home Assistant integration in Local API mode (no MQTT).
+The agent runs a small HTTP server on port `5115`. This is used by the Local HTTP API integration mode and for device info.
 
 | Method | Path | Auth | Description |
 |--------|------|:----:|-------------|
@@ -68,37 +68,26 @@ The `POST /notify` endpoint requires `Authorization: Bearer <api_key>`. The API 
 
 `GET /info` is unauthenticated so the integration config flow can validate the connection during setup.
 
-## Home Assistant
+## Home Assistant Connection Modes
 
-### MQTT mode (recommended)
+### MQTT (recommended)
 
-Enable MQTT in the agent settings. The device is discovered automatically by the Home Assistant integration. All features work: notifications, media player, sensors, commands, update entity.
+Enable MQTT in the agent settings. The device is discovered automatically by the Home Assistant integration. All features work: notifications, media player, sensors, commands, update entity. Requires an MQTT broker on the local network.
 
-### Local API mode
+### HA API (WebSocket)
 
-In the HASS.Agent integration, choose Local API setup:
+Enable HA API in the agent settings. The agent connects directly to Home Assistant's WebSocket API using a long-lived access token. Works remotely (e.g. via Nabu Casa) without an MQTT broker. HTTPS is required for remote access.
 
-- Host: the Windows machine LAN IP address, for example `192.168.1.42`
-- Port: `5115`
-- SSL: disabled
-- API key: copy from the agent General settings page
-
-Only notifications are supported in Local API mode. Use MQTT for full functionality.
-
-### HA API WebSocket mode
-
-HA API mode connects from the Windows client to Home Assistant's WebSocket API. It can be used as a remote/failover transport when MQTT is unavailable.
+Can be used standalone or as automatic failover when MQTT is unavailable — when both are enabled, the agent uses MQTT as primary and switches to WebSocket when the broker is unreachable, then switches back when MQTT recovers.
 
 Compared to MQTT:
-
-- no retained discovery/state
-- no MQTT Last Will offline detection
-- media thumbnails are sent as base64 events
-- MQTT topics and command events are targeted by `serial_number`, so changing the display name does not break routing
+- no retained discovery/state (sensor values are lost until the agent reconnects after a restart)
+- no MQTT Last Will (no automatic offline detection)
+- media thumbnails are sent as base64 events (~33% larger)
 
 The connection test also reads the installed `hass_agent` integration manifest through Home Assistant's WebSocket API and warns when the integration is missing, cannot be checked, or is older than the minimum supported version.
 
-When MQTT is unavailable, the agent publishes these Home Assistant event bus events:
+When using HA API, the agent publishes these Home Assistant event bus events:
 
 ```text
 hass_agent_device_update
@@ -108,15 +97,28 @@ hass_agent_media_thumbnail
 hass_agent_notification_action
 ```
 
-The integration sends commands back with:
+The integration sends commands back via `hass_agent_command` events:
 
 ```json
 {
   "serial_number": "agent-serial",
-  "command_type": "button_command",
+  "command_type": "notification | media_command | button_command",
   "payload": {}
 }
 ```
+
+All events and commands are targeted by `serial_number`, so renaming the device does not break routing.
+
+### Local HTTP API
+
+In the HASS.Agent integration, choose Local API setup:
+
+- Host: the Windows machine LAN IP address, for example `192.168.1.42`
+- Port: `5115`
+- SSL: disabled
+- API key: copy from the agent General settings page
+
+Only notifications are supported. Use MQTT or HA API for full functionality.
 
 ## Action Notifications
 
