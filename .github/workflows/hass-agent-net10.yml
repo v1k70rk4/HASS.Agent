@@ -1,0 +1,114 @@
+name: V1k70rk4 HASS.Agent .NET10
+
+on:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - "src/HASS.Agent.NET10/**"
+      - "installer/**"
+      - "NuGet.config"
+      - ".github/workflows/hass-agent-net10.yml"
+      - "README.md"
+  pull_request:
+    paths:
+      - "src/HASS.Agent.NET10/**"
+      - "installer/**"
+      - "NuGet.config"
+      - ".github/workflows/hass-agent-net10.yml"
+      - "README.md"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: windows-latest
+
+    env:
+      PROJECT: src/HASS.Agent.NET10/HASS.Agent.NET10.csproj
+      CONFIGURATION: Release
+      RUNTIME: win-x64
+      PUBLISH_DIR: artifacts/HASS.Agent.NET10/win-x64
+      INSTALLER_DIR: artifacts/installer
+      PACKAGE_DIR: artifacts/package
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore $env:PROJECT
+
+      - name: Build
+        run: dotnet build $env:PROJECT -c $env:CONFIGURATION --no-restore
+
+      - name: Read app version
+        run: |
+          [xml]$project = Get-Content $env:PROJECT
+          $version = ($project.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Project version not found."
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish $env:PROJECT
+          -c $env:CONFIGURATION
+          -r $env:RUNTIME
+          --self-contained true
+          -p:PublishSingleFile=true
+          -o $env:PUBLISH_DIR
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler not found at $iscc"
+          }
+          & $iscc "installer\HASS.Agent.NET10.iss" "/DMyAppVersion=$env:APP_VERSION"
+
+      - name: Package published app
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:PACKAGE_DIR | Out-Null
+          Compress-Archive -Path "$env:PUBLISH_DIR\*" -DestinationPath "$env:PACKAGE_DIR\HASS.Agent.NET10-win-x64-$env:APP_VERSION.zip" -Force
+
+      - name: Upload published app
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: HASS.Agent.NET10-win-x64
+          path: artifacts/HASS.Agent.NET10/win-x64
+
+      - name: Upload installer
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: HASS.Agent.NET10-Setup
+          path: artifacts/installer/*.exe
+
+      - name: Upload release assets
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/installer/*.exe
+            artifacts/package/*.zip
