@@ -263,8 +263,8 @@ internal sealed class TrayApplicationContext : ApplicationContext, INotification
 
     private static Icon LoadTrayIcon()
     {
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "hassagent.ico");
-        return File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
+        var stream = typeof(TrayApplicationContext).Assembly.GetManifestResourceStream("hassagent.ico");
+        return stream is not null ? new Icon(stream) : SystemIcons.Application;
     }
 }
 

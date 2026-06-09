@@ -10,22 +10,22 @@ internal static partial class Strings
 
     private static Dictionary<string, Dictionary<string, string>> Translations => TranslationSource.Value;
 
-    private static string _language = "hu";
-    private static string _haLanguage = "hu";
+    private static string _language = "en";
+    private static string _haLanguage = "en";
 
     public static string Language
     {
         get => _language;
-        set => _language = Translations.ContainsKey(value) ? value : "hu";
+        set => _language = Translations.ContainsKey(value) ? value : "en";
     }
 
     public static string HaLanguage
     {
         get => _haLanguage;
-        set => _haLanguage = Translations.ContainsKey(value) ? value : "hu";
+        set => _haLanguage = Translations.ContainsKey(value) ? value : "en";
     }
 
-    public static IReadOnlyList<string> AvailableLanguages => ["hu", "en"];
+    public static IReadOnlyList<string> AvailableLanguages => ["en", "hu"];
 
     public static string GetDisplayName(string langCode) => langCode switch
     {

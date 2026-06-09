@@ -223,12 +223,12 @@ internal static class Program
 
             if (doc.RootElement.TryGetProperty("language", out var lang))
             {
-                Localization.Strings.Language = lang.GetString() ?? "hu";
+                Localization.Strings.Language = lang.GetString() ?? "en";
             }
 
             if (doc.RootElement.TryGetProperty("haLanguage", out var haLang))
             {
-                Localization.Strings.HaLanguage = haLang.GetString() ?? "hu";
+                Localization.Strings.HaLanguage = haLang.GetString() ?? "en";
             }
         }
         catch

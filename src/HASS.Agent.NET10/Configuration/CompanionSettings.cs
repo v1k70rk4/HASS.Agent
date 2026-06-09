@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.Security;
@@ -22,15 +23,27 @@ internal sealed class CompanionSettings
 
     public bool AutoStartOnLogin { get; set; }
 
-    public string Language { get; set; } = "hu";
+    public string Language { get; set; } = DetectSystemLanguage();
 
-    public string HaLanguage { get; set; } = "hu";
+    public string HaLanguage { get; set; } = "en";
+
+    private static string DetectSystemLanguage()
+    {
+        var culture = CultureInfo.CurrentUICulture;
+        // Walk up the culture chain (e.g. "hu-HU" → "hu" → invariant).
+        while (culture != CultureInfo.InvariantCulture)
+        {
+            if (culture.TwoLetterISOLanguageName == "hu") return "hu";
+            culture = culture.Parent;
+        }
+        return "en";
+    }
 
     public string Manufacturer { get; set; } = "v1k70rk4";
 
     public string Model { get; set; } = AppIdentity.DisplayName;
 
-    public string SoftwareVersion { get; set; } = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.1.0";
+    public string SoftwareVersion { get; set; } = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.2.0";
 
     public bool MqttEnabled { get; set; }
 
@@ -166,12 +179,12 @@ internal sealed class CompanionSettings
         }
         Manufacturer = NormalizeText(Manufacturer, "v1k70rk4");
         Model = NormalizeText(Model, AppIdentity.DisplayName);
-        SoftwareVersion = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.1.0";
+        SoftwareVersion = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.2.0";
         MqttHost = NormalizeText(MqttHost, "homeassistant.local");
         MqttUsername = MqttUsername.Trim();
         HaApiUrl = NormalizeUrl(HaApiUrl);
-        if (Language is not "hu" and not "en") Language = "hu";
-        if (HaLanguage is not "hu" and not "en") HaLanguage = "hu";
+        if (Language is not "hu" and not "en") Language = "en";
+        if (HaLanguage is not "hu" and not "en") HaLanguage = "en";
 
         if (string.IsNullOrWhiteSpace(SerialNumber))
         {

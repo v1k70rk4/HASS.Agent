@@ -47,7 +47,6 @@ internal sealed class MainForm : Form
     private readonly ComboBox _langCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _haLangCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly Label _generalNotConfiguredError = new();
-    private readonly Label _generalMqttWarning = new();
     private readonly Label _generalServiceWarning = new();
     private Control? _generalDeviceCard;
     private Control? _generalNetworkCard;
@@ -274,17 +273,11 @@ internal sealed class MainForm : Form
             Color.FromArgb(153, 27, 27),
             Color.White);
         ConfigureStatusLabel(
-            _generalMqttWarning,
-            "⚠  " + S("General.MqttDisabledWarning"),
-            Color.FromArgb(255, 243, 224),
-            Color.FromArgb(180, 60, 0));
-        ConfigureStatusLabel(
             _generalServiceWarning,
             "⚠  " + S("General.ServiceNotInstalledWarning"),
             Color.FromArgb(255, 243, 224),
             Color.FromArgb(180, 60, 0));
         page.Controls.Add(_generalNotConfiguredError);
-        page.Controls.Add(_generalMqttWarning);
         page.Controls.Add(_generalServiceWarning);
         page.Layout += (_, _) => LayoutGeneralStatusMessages();
 
@@ -614,9 +607,7 @@ internal sealed class MainForm : Form
 
     private void UpdateGeneralStatusMessages()
     {
-        var neitherConfigured = !_settings.MqttEnabled && !_settings.HaApiEnabled;
-        _generalNotConfiguredError.Visible = neitherConfigured;
-        _generalMqttWarning.Visible = !neitherConfigured && !_settings.MqttEnabled;
+        _generalNotConfiguredError.Visible = !_settings.MqttEnabled && !_settings.HaApiEnabled;
         _generalServiceWarning.Visible = !IsServiceInstalled();
         LayoutGeneralStatusMessages();
     }
@@ -643,7 +634,7 @@ internal sealed class MainForm : Form
     {
         var y = D(56);
         var statusWidth = _generalDeviceCard?.Width ?? D(720);
-        foreach (var label in new[] { _generalNotConfiguredError, _generalMqttWarning, _generalServiceWarning })
+        foreach (var label in new[] { _generalNotConfiguredError, _generalServiceWarning })
         {
             if (!label.Visible)
             {
@@ -1639,8 +1630,8 @@ internal sealed class MainForm : Form
 
     private static Icon? LoadIcon()
     {
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "hassagent.ico");
-        return File.Exists(iconPath) ? new Icon(iconPath) : null;
+        var stream = typeof(MainForm).Assembly.GetManifestResourceStream("hassagent.ico");
+        return stream is not null ? new Icon(stream) : null;
     }
 
     private sealed record NavEntry(Panel Panel, Panel Indicator, Label Label);

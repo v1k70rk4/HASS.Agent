@@ -2,7 +2,7 @@
 
 ![Windows](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![Version](https://img.shields.io/badge/version-10.1.0-brightgreen)
+![Version](https://img.shields.io/badge/version-10.2.0-brightgreen)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT%20%7C%20WebSocket%20API-41BDF5?logo=homeassistant&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -46,6 +46,13 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
 ---
 
 ## What Changed
+
+### 10.2.0
+
+- Fixed default language set to Hungarian on non-Hungarian systems; the app now auto-detects the OS language and defaults to English.
+- Fixed clean install not removing legacy `HASS.Agent.Companion` directories, causing old settings to migrate back.
+- Fixed tray icon missing in standalone single-file publish by embedding the icon as an assembly resource.
+- Removed the "MQTT not configured" warning from the General page when HA API is enabled.
 
 ### 10.1.0
 

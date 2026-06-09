@@ -1,16 +1,69 @@
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
 
+## Visual Studio / MSBuild
 .vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
 
-HASSAgent/bin/
+## Visual Studio / MSBuild
+.claude
 
-HASSAgent/obj/
+## Build logs
+*.log
+msbuild*.wrn
+msbuild*.err
 
-src/HASS.Agent/bin
-
-src/HASS.Agent/obj
-
-src/HASS.Agent.Companion/bin
-
-src/HASS.Agent.Companion/obj
-
+## NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+**/packages/repositories.config
+project.lock.json
+project.fragment.lock.json
 artifacts/
+
+## Rider
+.idea/
+*.sln.iml
+
+## VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+## Publish output
+*.publish.xml
+publish/
+
+## User-specific files
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+## dotnet tool
+.dotnet/

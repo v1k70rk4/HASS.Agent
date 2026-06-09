@@ -19,7 +19,7 @@ namespace HASS.Agent.Companion.Mqtt;
 internal sealed class HaWebSocketService : IDisposable
 {
     public const string IntegrationDomain = "hass_agent";
-    public const string MinimumIntegrationVersion = "10.1.0";
+    public const string MinimumIntegrationVersion = "10.2.0";
 
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(30);
 

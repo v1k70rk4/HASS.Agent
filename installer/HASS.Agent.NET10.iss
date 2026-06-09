@@ -1,5 +1,5 @@
 ﻿#ifndef MyAppVersion
-#define MyAppVersion "10.1.0"
+#define MyAppVersion "10.2.0"
 #endif
 
 #define MyAppName "HASS.Agent .NET10"
@@ -155,6 +155,9 @@ begin
     if WizardIsTaskSelected('cleaninstall') then
     begin
       DelTree(ExpandConstant('{commonappdata}\HASS.Agent.NET10'), True, True, True);
+      { Also remove legacy directories so the migration does not restore old settings. }
+      DelTree(ExpandConstant('{commonappdata}\HASS.Agent.Companion'), True, True, True);
+      DelTree(ExpandConstant('{userappdata}\HASS.Agent.Companion'), True, True, True);
     end;
   end;
 
