@@ -217,6 +217,8 @@ The same executable can run as a tray app or as a Windows service. Use the **Ser
 
 Use the **Capabilities** page to choose which role handles each feature.
 
+<p align="center"><img src="docs/images/ui-services.png" width="700" alt="Service page"></p>
+
 <p align="center"><img src="docs/images/ui-capabilities.png" width="700" alt="Capabilities page"></p>
 
 ### Danger Zone
@@ -235,6 +237,7 @@ An opt-in maintenance and diagnostics toolbox. Enable it with the **Danger Zone*
 The Danger Zone also hosts the **beta updates** toggle: when enabled, update checks include GitHub pre-releases, so you can follow the beta channel. Stable users are never offered pre-releases.
 
 <p align="center"><img src="docs/images/ui-dangerzone-menu.png" width="700" alt="Danger Zone tools menu"></p>
+
 <p align="center"><img src="docs/images/ui-dangerzone-mqtt-maintenance.png" width="700" alt="Danger Zone MQTT maintenance"></p>
 
 ---
