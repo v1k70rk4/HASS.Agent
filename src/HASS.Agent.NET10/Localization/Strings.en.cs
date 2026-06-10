@@ -118,6 +118,10 @@ internal static partial class Strings
             ["Mqtt.SystemSensors"] = "System sensors over MQTT",
             ["Mqtt.HostRequired"] = "Broker address cannot be empty.",
             ["Mqtt.NotConfigured"] = "MQTT is not configured.",
+            ["Mqtt.TestButton"] = "Test connection",
+            ["Mqtt.TestSuccess"] = "Connected to the broker.",
+            ["Mqtt.TestFailed"] = "Connection failed: {0}",
+            ["Mqtt.TestTimeout"] = "timeout",
 
             // HA API page
             ["Nav.HaApi"] = "HA API",

@@ -12,6 +12,7 @@ using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.SystemCommands;
 using HASS.Agent.Companion.SystemService;
 using HASS.Agent.Companion.SystemStatus;
+using MQTTnet;
 
 namespace HASS.Agent.Companion.Tray;
 
@@ -66,6 +67,7 @@ internal sealed class MainForm : Form
     private readonly TextBox _mqttPass = new() { UseSystemPasswordChar = true };
     private readonly CheckBox _mqttTls = new();
     private readonly CheckBox _mqttRetain = new();
+    private readonly Label _mqttTestResult = new();
 
     private readonly CheckBox _haApiEnabled = new();
     private readonly TextBox _haApiUrl = new();
@@ -378,6 +380,14 @@ internal sealed class MainForm : Form
         copyKeyBtn.Click += (_, _) => Clipboard.SetText(_settings.ApiKey);
         card2.Controls.Add(copyKeyBtn);
 
+        card2.Layout += (_, _) =>
+        {
+            var margin = D(20);
+            urlBox.Width = Math.Max(D(160), Math.Min(D(540), card2.ClientSize.Width - urlBox.Left - margin));
+            copyKeyBtn.Left = Math.Min(D(512), card2.ClientSize.Width - copyKeyBtn.Width - margin);
+            apiKeyBox.Width = Math.Max(D(100), copyKeyBtn.Left - apiKeyBox.Left - D(8));
+        };
+
         var card3 = MakeCard(page, 28, 618, 720, 120, S("General.Files"));
         _generalFilesCard = card3;
         card3.Controls.Add(new Label
@@ -422,13 +432,14 @@ internal sealed class MainForm : Form
         page.Controls.Add(_mqttWarning);
 
         var cardTop = _settings.MqttEnabled ? 56 : 96;
-        var card = MakeCard(page, 28, cardTop, 600, 308, S("Mqtt.Connection"));
+        var card = MakeCard(page, 28, cardTop, 600, 352, S("Mqtt.Connection"));
         void LayoutMqttPage()
         {
             _mqttWarning.Location = Pt(28, 56);
             _mqttWarning.Size = new Size(card.Width, D(34));
             card.Top = _mqttWarning.Visible ? D(96) : D(56);
             _mqttWarning.BringToFront();
+            _mqttTestResult.Width = Math.Max(D(220), card.ClientSize.Width - D(208));
         }
 
         page.Layout += (_, _) => LayoutMqttPage();
@@ -446,9 +457,75 @@ internal sealed class MainForm : Form
         y = AddField(card, S("Mqtt.Password"), _mqttPass, y);
         y += 4;
         y = AddCheck(card, _mqttTls, S("Mqtt.UseTls"), y);
-        AddCheck(card, _mqttRetain, S("Mqtt.RetainDiscovery"), y);
+        y = AddCheck(card, _mqttRetain, S("Mqtt.RetainDiscovery"), y);
+        y += 6;
+
+        var testBtn = MakeSecondaryButton(S("Mqtt.TestButton"), 160, 32);
+        testBtn.Location = Pt(20, y);
+        testBtn.Click += async (_, _) => await TestMqttConnectionAsync();
+        card.Controls.Add(testBtn);
+
+        _mqttTestResult.Location = Pt(188, y);
+        _mqttTestResult.Size = Sz(380, 32);
+        _mqttTestResult.ForeColor = TextMuted;
+        _mqttTestResult.Font = new Font("Segoe UI", 9F);
+        _mqttTestResult.TextAlign = ContentAlignment.MiddleLeft;
+        card.Controls.Add(_mqttTestResult);
 
         return page;
+    }
+
+    private async Task TestMqttConnectionAsync()
+    {
+        var host = _mqttHost.Text.Trim();
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            _mqttTestResult.ForeColor = Color.FromArgb(153, 27, 27);
+            _mqttTestResult.Text = S("Mqtt.HostRequired");
+            return;
+        }
+
+        _mqttTestResult.ForeColor = TextMuted;
+        _mqttTestResult.Text = "...";
+
+        try
+        {
+            // Tests the values currently in the form, not the saved settings.
+            var factory = new MQTTnet.MqttClientFactory();
+            using var client = factory.CreateMqttClient();
+            var builder = factory.CreateClientOptionsBuilder()
+                .WithClientId(_settings.GetMqttClientId("test"))
+                .WithTcpServer(host, (int)_mqttPort.Value)
+                .WithCleanSession()
+                .WithTimeout(TimeSpan.FromSeconds(10));
+
+            if (!string.IsNullOrWhiteSpace(_mqttUser.Text))
+            {
+                builder.WithCredentials(_mqttUser.Text.Trim(), _mqttPass.Text);
+            }
+
+            if (_mqttTls.Checked)
+            {
+                builder.WithTlsOptions(tls => tls.UseTls());
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await client.ConnectAsync(builder.Build(), cts.Token);
+            await client.DisconnectAsync();
+
+            _mqttTestResult.ForeColor = Color.FromArgb(21, 128, 61);
+            _mqttTestResult.Text = "✓  " + S("Mqtt.TestSuccess");
+        }
+        catch (OperationCanceledException)
+        {
+            _mqttTestResult.ForeColor = Color.FromArgb(153, 27, 27);
+            _mqttTestResult.Text = string.Format(S("Mqtt.TestFailed"), S("Mqtt.TestTimeout"));
+        }
+        catch (Exception ex)
+        {
+            _mqttTestResult.ForeColor = Color.FromArgb(153, 27, 27);
+            _mqttTestResult.Text = string.Format(S("Mqtt.TestFailed"), ex.Message);
+        }
     }
 
     private Panel BuildHaApiPage()
@@ -538,6 +615,7 @@ internal sealed class MainForm : Form
         httpWarningTip.SetToolTip(_haApiHttpWarningIcon, S("HaApi.HttpWarning"));
         httpWarningTip.SetToolTip(_haApiUrl, S("HaApi.HttpWarning"));
         card.Controls.Add(_haApiHttpWarningIcon);
+        card.Layout += (_, _) => _haApiHttpWarningIcon.Location = new Point(_haApiUrl.Right + D(8), _haApiUrl.Top);
 
         _haApiUrl.TextChanged += (_, _) =>
         {
@@ -2289,6 +2367,15 @@ internal sealed class MainForm : Form
         input.Location = Pt(28 + labelWidth, y);
         input.Size = Sz(inputWidth, 28);
         card.Controls.Add(input);
+
+        // Shrink with the card on small windows; never grow past the design width.
+        var designWidth = D(inputWidth);
+        card.Layout += (_, _) =>
+        {
+            var available = card.ClientSize.Width - input.Left - D(20);
+            input.Width = Math.Max(D(80), Math.Min(designWidth, available));
+        };
+
         return y + 34;
     }
 

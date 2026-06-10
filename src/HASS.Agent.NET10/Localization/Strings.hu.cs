@@ -118,6 +118,10 @@ internal static partial class Strings
             ["Mqtt.SystemSensors"] = "Gépállapot szenzorok MQTT-n",
             ["Mqtt.HostRequired"] = "A broker cím nem lehet üres.",
             ["Mqtt.NotConfigured"] = "Az MQTT nincs beállítva.",
+            ["Mqtt.TestButton"] = "Kapcsolat tesztelése",
+            ["Mqtt.TestSuccess"] = "Sikeres kapcsolódás a brokerhez.",
+            ["Mqtt.TestFailed"] = "Kapcsolódás sikertelen: {0}",
+            ["Mqtt.TestTimeout"] = "időtúllépés",
 
             // HA API page
             ["Nav.HaApi"] = "HA API",
