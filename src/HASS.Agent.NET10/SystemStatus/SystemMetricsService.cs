@@ -830,6 +830,24 @@ internal sealed class SystemMetricsService : IDisposable
         };
     }
 
+    /// <summary>
+    /// Reads a single custom sensor value for the settings "Test value" button.
+    /// Process / service / disk sensors need no system metrics, so they skip the
+    /// full Read() (which would scan the event log etc. — seconds of work).
+    /// Only built-in-attribute sensors fall back to a full snapshot.
+    /// </summary>
+    public static object? TestCustomSensorValue(CustomSensorDefinition sensor, FileLog log)
+    {
+        if (sensor.IsProcessRunning || sensor.IsServiceStatus || sensor.IsDiskFree)
+        {
+            var empty = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+            return ReadCustomSensor(sensor, empty).Value;
+        }
+
+        using var service = new SystemMetricsService(log, null);
+        return service.Read([sensor], serviceRole: false).CustomSensors.FirstOrDefault()?.Value;
+    }
+
     private static IReadOnlyList<CustomSensorState> ReadCustomSensors(
         IReadOnlyList<CustomSensorDefinition> sensors,
         bool serviceRole,

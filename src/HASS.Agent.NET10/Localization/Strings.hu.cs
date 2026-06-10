@@ -39,7 +39,7 @@ internal static partial class Strings
             ["General.HaLanguage"] = "HA entitás nyelv",
             ["General.NotConfiguredError"] = "Sem az MQTT, sem a HA API nincs beállítva! Az alkalmazás jelenleg nem szolgáltat adatot! Állíts be egy MQTT (ajánlott) vagy HA API kapcsolatot.",
             ["General.MqttDisabledWarning"] = "Az MQTT nincs beállítva. Ha van MQTT brokered, érdemes azt is bekapcsolni.",
-            ["General.ServiceNotInstalledWarning"] = "A Windows szolgáltatás nincs telepítve, ezért a service oldali parancsok és szenzorok nem fognak futni.",
+            ["General.ServiceNotInstalledWarning"] = "A Windows szolgáltatás nincs telepítve vagy nem fut, ezért a service oldali parancsok, szenzorok és a csendes frissítés nem működnek.",
 
             // Danger Zone page
             ["Danger.Title"] = "Veszélyes terület",
@@ -82,6 +82,7 @@ internal static partial class Strings
             ["HaPn.NoInstaller"] = "{0}: a(z) {1} kiadáshoz nincs telepítő — telepítsd kézzel.",
             ["HaPn.UpdateStartedSilent"] = "{0}: a(z) {1} frissítés csendes telepítése elindult a rendszerszolgáltatáson keresztül.",
             ["HaPn.UpdateStartedUac"] = "{0}: a(z) {1} frissítés elindult — erősítsd meg a UAC ablakot a gépen. Teljesen csendes frissítéshez telepítsd a rendszerszolgáltatást.",
+            ["HaPn.UpdateStartedServiceStopped"] = "{0}: a rendszerszolgáltatás telepítve van, de áll, ezért a(z) {1} frissítéshez UAC megerősítés kell a gépen. Indítsd el a szolgáltatást (tray → Szolgáltatás → Indítás) a teljesen csendes frissítéshez.",
             ["HaPn.UpdateFailed"] = "{0}: a frissítés sikertelen: {1}",
             ["Danger.Warning"] = "Élő eszköz retained üzeneteinek törlése után annak entitásai eltűnnek a Home Assistantból, amíg az eszköz újra nem publikálja a discovery-t (újraindítás vagy újracsatlakozás).",
             ["Danger.RetainedCard"] = "Retained MQTT üzenetek",

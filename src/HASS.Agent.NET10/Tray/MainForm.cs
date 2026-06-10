@@ -723,21 +723,23 @@ internal sealed class MainForm : Form
     private void UpdateGeneralStatusMessages()
     {
         _generalNotConfiguredError.Visible = !_settings.MqttEnabled && !_settings.HaApiEnabled;
-        _generalServiceWarning.Visible = !IsServiceInstalled();
+        _generalServiceWarning.Visible = !IsServiceHealthy();
         LayoutGeneralStatusMessages();
     }
 
     private void UpdateServiceStatusMessage()
     {
-        _serviceWarning.Visible = !IsServiceInstalled();
+        _serviceWarning.Visible = !IsServiceHealthy();
         LayoutServiceStatusMessage();
     }
 
-    private static bool IsServiceInstalled()
+    // Warn when the service is missing OR installed-but-stopped: a stopped
+    // service can't run commands/sensors and forces the update UAC prompt.
+    private static bool IsServiceHealthy()
     {
         try
         {
-            return CompanionServiceManager.IsInstalled();
+            return CompanionServiceManager.IsInstalled() && CompanionServiceManager.IsRunning();
         }
         catch
         {
@@ -2095,17 +2097,13 @@ internal sealed class MainForm : Form
         try
         {
             var sensor = BuildCustomSensorFromRow(row, forceEnabled: true);
-            var state = await Task.Run(() =>
-            {
-                using var metrics = new SystemMetricsService(_log, null);
-                return metrics.Read([sensor], serviceRole: false).CustomSensors.FirstOrDefault();
-            });
+            var value = await Task.Run(() => SystemMetricsService.TestCustomSensorValue(sensor, _log));
             if (row.DataGridView is null || row.DataGridView.IsDisposed)
             {
                 return;
             }
 
-            valueCell.Value = FormatSensorValue(state?.Value);
+            valueCell.Value = FormatSensorValue(value);
         }
         catch (Exception ex)
         {

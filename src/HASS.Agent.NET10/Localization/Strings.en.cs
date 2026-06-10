@@ -39,7 +39,7 @@ internal static partial class Strings
             ["General.HaLanguage"] = "HA entity language",
             ["General.NotConfiguredError"] = "Neither MQTT nor HA API is configured — the application is not sending any data. Set up an MQTT (recommended) or HA API connection.",
             ["General.MqttDisabledWarning"] = "MQTT is not configured. If you have an MQTT broker, consider enabling it.",
-            ["General.ServiceNotInstalledWarning"] = "The Windows service is not installed, so service-side commands and sensors will not run.",
+            ["General.ServiceNotInstalledWarning"] = "The Windows service is not installed or not running, so service-side commands, sensors, and silent updates will not work.",
 
             // Danger Zone page
             ["Danger.Title"] = "Danger Zone",
@@ -82,6 +82,7 @@ internal static partial class Strings
             ["HaPn.NoInstaller"] = "{0}: release {1} has no installer asset — install it manually.",
             ["HaPn.UpdateStartedSilent"] = "{0}: installing update {1} silently via the system service.",
             ["HaPn.UpdateStartedUac"] = "{0}: update {1} started — confirm the UAC prompt on the PC. Install the system service for fully silent updates.",
+            ["HaPn.UpdateStartedServiceStopped"] = "{0}: the system service is installed but stopped, so update {1} needs a UAC prompt on the PC. Start the service (tray → Service → Start) for fully silent updates.",
             ["HaPn.UpdateFailed"] = "{0}: update failed: {1}",
             ["Danger.Warning"] = "Deleting retained messages of a live device removes its entities from Home Assistant until that device publishes its discovery again (restart or reconnect).",
             ["Danger.RetainedCard"] = "Retained MQTT messages",

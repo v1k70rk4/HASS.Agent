@@ -267,10 +267,14 @@ internal sealed class MqttCompanionService : IDisposable
                 return;
             }
 
-            // No service: install from the user session — someone has to confirm UAC.
+            // No running service: install from the user session — someone has to confirm UAC.
+            // Distinguish "installed but stopped" (just start it) from "not installed at all".
+            var messageKey = CompanionServiceManager.IsInstalled()
+                ? "HaPn.UpdateStartedServiceStopped"
+                : "HaPn.UpdateStartedUac";
             await PublishPersistentNotificationAsync(
                 Strings.GetHa("HaPn.UpdateTitle"),
-                string.Format(Strings.GetHa("HaPn.UpdateStartedUac"), _settings.DeviceName, update.LatestVersion));
+                string.Format(Strings.GetHa(messageKey), _settings.DeviceName, update.LatestVersion));
 
             var installerPath = await AppUpdateService.DownloadAsync(update, GetUpdateDownloadDirectory());
             _log.Info($"Starting installer with elevation: {installerPath}");
