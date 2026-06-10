@@ -325,18 +325,72 @@ internal sealed class MqttCompanionService : IDisposable
             }
 
             var installerPath = await AppUpdateService.DownloadAsync(update, GetUpdateDownloadDirectory());
-            _log.Info($"Starting silent installer: {installerPath}");
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = installerPath,
-                Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SILENTUPDATE",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            });
+            _log.Info($"Downloaded installer: {installerPath}");
+
+            // Run via Task Scheduler, NOT as a child process: the installer stops
+            // this service to free the locked exe, which would kill a child process
+            // (and the install) mid-way. A scheduled task survives the service stop.
+            var batch = WriteBatch("run-update.cmd",
+                $"@echo off{Environment.NewLine}" +
+                $"\"{installerPath}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SILENTUPDATE{Environment.NewLine}");
+            RunDetachedTask("HASSAgentNet10Update", batch, asSystem: true);
+            _log.Info("Silent installer scheduled via Task Scheduler.");
         }
         catch (Exception ex)
         {
             _log.Warning($"Silent update install failed: {ex.Message}");
+        }
+    }
+
+    private string WriteBatch(string fileName, string content)
+    {
+        var directory = GetUpdateDownloadDirectory();
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, fileName);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    /// <summary>
+    /// Runs a batch file via a one-shot scheduled task, fully detached from this
+    /// process tree so it survives both service stop and taskkill /T on the tray app.
+    /// </summary>
+    private void RunDetachedTask(string taskName, string batchPath, bool asSystem)
+    {
+        RunSchtasks($"/delete /tn \"{taskName}\" /f", ignoreErrors: true);
+        var runAs = asSystem ? " /ru SYSTEM /rl HIGHEST" : string.Empty;
+        RunSchtasks($"/create /tn \"{taskName}\" /tr \"{batchPath}\" /sc once /st 00:00{runAs} /f");
+        RunSchtasks($"/run /tn \"{taskName}\"");
+    }
+
+    private void RunSchtasks(string arguments, bool ignoreErrors = false)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+
+            if (process is null)
+            {
+                return;
+            }
+
+            process.WaitForExit(10_000);
+            if (process.ExitCode != 0 && !ignoreErrors)
+            {
+                _log.Warning($"schtasks {arguments} exited with code {process.ExitCode}: {process.StandardError.ReadToEnd().Trim()}");
+            }
+        }
+        catch (Exception ex) when (ignoreErrors)
+        {
+            _log.Debug($"schtasks {arguments} failed (ignored): {ex.Message}");
         }
     }
 
@@ -353,8 +407,9 @@ internal sealed class MqttCompanionService : IDisposable
     }
 
     /// <summary>
-    /// The installer stops this tray app; a detached watchdog waits for the setup
-    /// process to finish and starts the new version in the user session.
+    /// The installer stops this tray app (taskkill /T would kill a child watchdog),
+    /// so the watchdog runs via a one-shot user scheduled task: it waits for the
+    /// setup process to come and go, then relaunches the tray app in the user session.
     /// </summary>
     private void SpawnRelaunchWatchdog()
     {
@@ -364,24 +419,29 @@ internal sealed class MqttCompanionService : IDisposable
             return;
         }
 
-        var script =
-            "$deadline=(Get-Date).AddMinutes(15);$seen=$false;" +
-            "while((Get-Date) -lt $deadline){" +
-            "if(Get-Process -Name 'HASS.Agent.NET10-Setup*' -ErrorAction SilentlyContinue){$seen=$true}" +
-            "elseif($seen){break};" +
-            "Start-Sleep -Seconds 5};" +
-            "Start-Sleep -Seconds 5;" +
-            $"Start-Process -FilePath '{executable}' -ArgumentList '--quiet'";
+        var batch = WriteBatch("relaunch.cmd",
+            "@echo off" + Environment.NewLine +
+            "setlocal" + Environment.NewLine +
+            "set /a tries=0" + Environment.NewLine +
+            ":waitappear" + Environment.NewLine +
+            "timeout /t 1 /nobreak >nul" + Environment.NewLine +
+            "tasklist 2>nul | find /i \"HASS.Agent.NET10-Setup\" >nul" + Environment.NewLine +
+            "if not errorlevel 1 goto waitgone" + Environment.NewLine +
+            "set /a tries+=1" + Environment.NewLine +
+            "if %tries% lss 30 goto waitappear" + Environment.NewLine +
+            "goto launch" + Environment.NewLine +
+            ":waitgone" + Environment.NewLine +
+            "timeout /t 2 /nobreak >nul" + Environment.NewLine +
+            "tasklist 2>nul | find /i \"HASS.Agent.NET10-Setup\" >nul" + Environment.NewLine +
+            "if not errorlevel 1 goto waitgone" + Environment.NewLine +
+            ":launch" + Environment.NewLine +
+            "timeout /t 3 /nobreak >nul" + Environment.NewLine +
+            $"start \"\" \"{executable}\" --quiet" + Environment.NewLine +
+            "endlocal" + Environment.NewLine);
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            Arguments = $"-NoProfile -WindowStyle Hidden -Command \"{script}\"",
-            WindowStyle = ProcessWindowStyle.Hidden,
-            CreateNoWindow = true,
-            UseShellExecute = false
-        });
-        _log.Info("Relaunch watchdog started.");
+        // User task (not SYSTEM): relaunches the tray in the visible user session.
+        RunDetachedTask("HASSAgentNet10Relaunch", batch, asSystem: false);
+        _log.Info("Relaunch watchdog scheduled via Task Scheduler.");
     }
 
     public async Task StopAsync(bool publishOffline = true)
