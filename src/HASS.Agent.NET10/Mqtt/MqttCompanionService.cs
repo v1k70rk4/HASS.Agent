@@ -1,10 +1,13 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HASS.Agent.Companion.Configuration;
 using HASS.Agent.Companion.Http;
+using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Logging;
+using HASS.Agent.Companion.SystemService;
 using HASS.Agent.Companion.Media;
 using HASS.Agent.Companion.SystemCommands;
 using HASS.Agent.Companion.SystemStatus;
@@ -38,6 +41,8 @@ internal sealed class MqttCompanionService : IDisposable
     private readonly SemaphoreSlim _restartLock = new(1, 1);
     private HaWebSocketService? _haWs;
     private bool _isOnWebSocket;
+    private string? _pendingUpdateCompletedFrom;
+    private int _updateInstallInProgress;
 
     // Connection state tracking — when only capabilities/sensors change,
     // we refresh discovery without restarting the whole MQTT connection.
@@ -165,6 +170,284 @@ internal sealed class MqttCompanionService : IDisposable
             retain: false);
     }
 
+    /// <summary>Re-sends the device discovery on the active transport. Returns false when not connected.</summary>
+    public async Task<bool> RepublishDiscoveryAsync()
+    {
+        if (_isOnWebSocket && _haWs is not null)
+        {
+            await PublishDiscoveryViaWebSocketAsync(_cts?.Token ?? CancellationToken.None);
+            _log.Info("Discovery republished over HA WebSocket API.");
+            return true;
+        }
+
+        if (_client is { IsConnected: true })
+        {
+            await PublishDiscoveryAsync();
+            _log.Info("Discovery republished over MQTT.");
+            return true;
+        }
+
+        _log.Warning("Discovery republish requested but no transport is connected.");
+        return false;
+    }
+
+    /// <summary>Queues an "updated to X" persistent notification for the next connect.</summary>
+    public void NotifyUpdateCompleted(string previousVersion)
+    {
+        _pendingUpdateCompletedFrom = previousVersion;
+    }
+
+    /// <summary>Creates a Home Assistant persistent notification on the active transport.</summary>
+    public async Task PublishPersistentNotificationAsync(string title, string message)
+    {
+        if (_isOnWebSocket && _haWs is not null)
+        {
+            await _haWs.PublishPersistentNotificationAsync(title, message, _cts?.Token ?? CancellationToken.None);
+            return;
+        }
+
+        await PublishJsonAsync(PersistentNotificationTopic, new PersistentNotificationMessage(title, message), retain: false);
+    }
+
+    private async Task PublishPendingUpdateNotificationAsync()
+    {
+        var previousVersion = _pendingUpdateCompletedFrom;
+        if (previousVersion is null)
+        {
+            return;
+        }
+
+        _pendingUpdateCompletedFrom = null;
+        await PublishPersistentNotificationAsync(
+            Strings.GetHa("HaPn.UpdateTitle"),
+            string.Format(Strings.GetHa("HaPn.UpdateCompleted"), _settings.DeviceName, previousVersion, _settings.SoftwareVersion));
+    }
+
+    /// <summary>Handles the Install button of the HA update entity (tray app role).</summary>
+    private async Task HandleUpdateInstallRequestAsync()
+    {
+        if (Interlocked.Exchange(ref _updateInstallInProgress, 1) == 1)
+        {
+            _log.Info("Update install already in progress, ignoring request.");
+            return;
+        }
+
+        try
+        {
+            _log.Info("Update install requested from Home Assistant.");
+            var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion, _settings.BetaUpdatesEnabled);
+            if (!update.UpdateAvailable)
+            {
+                await PublishPersistentNotificationAsync(
+                    Strings.GetHa("HaPn.UpdateTitle"),
+                    string.Format(Strings.GetHa("HaPn.NoUpdate"), _settings.DeviceName));
+                return;
+            }
+
+            if (!IsInstallerAsset(update.AssetName))
+            {
+                await PublishPersistentNotificationAsync(
+                    Strings.GetHa("HaPn.UpdateTitle"),
+                    string.Format(Strings.GetHa("HaPn.NoInstaller"), _settings.DeviceName, update.LatestVersion));
+                return;
+            }
+
+            if (CompanionServiceManager.IsRunning())
+            {
+                // The SYSTEM service installs without a UAC prompt; a detached
+                // watchdog relaunches this tray app once the installer finishes.
+                SpawnRelaunchWatchdog();
+                await PublishJsonAsync(
+                    ServiceCommandTopic,
+                    new SystemCommandMessage("install_update", Force: false, Time: 0, Comment: null, RestartCancel: false),
+                    retain: false);
+                await PublishPersistentNotificationAsync(
+                    Strings.GetHa("HaPn.UpdateTitle"),
+                    string.Format(Strings.GetHa("HaPn.UpdateStartedSilent"), _settings.DeviceName, update.LatestVersion));
+                return;
+            }
+
+            // No running service: install from the user session — someone has to confirm UAC.
+            // Distinguish "installed but stopped" (just start it) from "not installed at all".
+            var messageKey = CompanionServiceManager.IsInstalled()
+                ? "HaPn.UpdateStartedServiceStopped"
+                : "HaPn.UpdateStartedUac";
+            await PublishPersistentNotificationAsync(
+                Strings.GetHa("HaPn.UpdateTitle"),
+                string.Format(Strings.GetHa(messageKey), _settings.DeviceName, update.LatestVersion));
+
+            var installerPath = await AppUpdateService.DownloadAsync(update, GetUpdateDownloadDirectory());
+            _log.Info($"Starting installer with elevation: {installerPath}");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = installerPath,
+                Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART",
+                UseShellExecute = true,
+                Verb = "runas"
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Update install failed: {ex.Message}");
+            try
+            {
+                await PublishPersistentNotificationAsync(
+                    Strings.GetHa("HaPn.UpdateTitle"),
+                    string.Format(Strings.GetHa("HaPn.UpdateFailed"), _settings.DeviceName, ex.Message));
+            }
+            catch
+            {
+                // Transport may be down; the log entry above is the fallback.
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _updateInstallInProgress, 0);
+        }
+    }
+
+    /// <summary>
+    /// Service-role silent install. Downloads the installer from GitHub itself —
+    /// never runs a caller-supplied path as SYSTEM.
+    /// </summary>
+    private async Task RunSilentUpdateInstallAsync()
+    {
+        try
+        {
+            _log.Info("Silent update install requested (service role).");
+            var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion, _settings.BetaUpdatesEnabled);
+            if (!update.UpdateAvailable)
+            {
+                _log.Info("No update available, skipping silent install.");
+                return;
+            }
+
+            if (!IsInstallerAsset(update.AssetName))
+            {
+                _log.Warning($"Release {update.LatestVersion} has no installer asset, skipping silent install.");
+                return;
+            }
+
+            var installerPath = await AppUpdateService.DownloadAsync(update, GetUpdateDownloadDirectory());
+            _log.Info($"Downloaded installer: {installerPath}");
+
+            // Run via Task Scheduler, NOT as a child process: the installer stops
+            // this service to free the locked exe, which would kill a child process
+            // (and the install) mid-way. A scheduled task survives the service stop.
+            var batch = WriteBatch("run-update.cmd",
+                $"@echo off{Environment.NewLine}" +
+                $"\"{installerPath}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SILENTUPDATE{Environment.NewLine}");
+            RunDetachedTask("HASSAgentNet10Update", batch, asSystem: true);
+            _log.Info("Silent installer scheduled via Task Scheduler.");
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Silent update install failed: {ex.Message}");
+        }
+    }
+
+    private string WriteBatch(string fileName, string content)
+    {
+        var directory = GetUpdateDownloadDirectory();
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, fileName);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    /// <summary>
+    /// Runs a batch file via a one-shot scheduled task, fully detached from this
+    /// process tree so it survives both service stop and taskkill /T on the tray app.
+    /// </summary>
+    private void RunDetachedTask(string taskName, string batchPath, bool asSystem)
+    {
+        RunSchtasks($"/delete /tn \"{taskName}\" /f", ignoreErrors: true);
+        var runAs = asSystem ? " /ru SYSTEM /rl HIGHEST" : string.Empty;
+        RunSchtasks($"/create /tn \"{taskName}\" /tr \"{batchPath}\" /sc once /st 00:00{runAs} /f");
+        RunSchtasks($"/run /tn \"{taskName}\"");
+    }
+
+    private void RunSchtasks(string arguments, bool ignoreErrors = false)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+
+            if (process is null)
+            {
+                return;
+            }
+
+            process.WaitForExit(10_000);
+            if (process.ExitCode != 0 && !ignoreErrors)
+            {
+                _log.Warning($"schtasks {arguments} exited with code {process.ExitCode}: {process.StandardError.ReadToEnd().Trim()}");
+            }
+        }
+        catch (Exception ex) when (ignoreErrors)
+        {
+            _log.Debug($"schtasks {arguments} failed (ignored): {ex.Message}");
+        }
+    }
+
+    private static bool IsInstallerAsset(string? assetName)
+    {
+        return assetName is not null &&
+               assetName.Contains("Setup", StringComparison.OrdinalIgnoreCase) &&
+               assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetUpdateDownloadDirectory()
+    {
+        return Path.Combine(Path.GetTempPath(), "HASS.Agent.NET10", "updates");
+    }
+
+    /// <summary>
+    /// The installer stops this tray app (taskkill /T would kill a child watchdog),
+    /// so the watchdog runs via a one-shot user scheduled task: it waits for the
+    /// setup process to come and go, then relaunches the tray app in the user session.
+    /// </summary>
+    private void SpawnRelaunchWatchdog()
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(executable))
+        {
+            return;
+        }
+
+        var batch = WriteBatch("relaunch.cmd",
+            "@echo off" + Environment.NewLine +
+            "setlocal" + Environment.NewLine +
+            "set /a tries=0" + Environment.NewLine +
+            ":waitappear" + Environment.NewLine +
+            "timeout /t 1 /nobreak >nul" + Environment.NewLine +
+            "tasklist 2>nul | find /i \"HASS.Agent.NET10-Setup\" >nul" + Environment.NewLine +
+            "if not errorlevel 1 goto waitgone" + Environment.NewLine +
+            "set /a tries+=1" + Environment.NewLine +
+            "if %tries% lss 30 goto waitappear" + Environment.NewLine +
+            "goto launch" + Environment.NewLine +
+            ":waitgone" + Environment.NewLine +
+            "timeout /t 2 /nobreak >nul" + Environment.NewLine +
+            "tasklist 2>nul | find /i \"HASS.Agent.NET10-Setup\" >nul" + Environment.NewLine +
+            "if not errorlevel 1 goto waitgone" + Environment.NewLine +
+            ":launch" + Environment.NewLine +
+            "timeout /t 3 /nobreak >nul" + Environment.NewLine +
+            $"start \"\" \"{executable}\" --quiet" + Environment.NewLine +
+            "endlocal" + Environment.NewLine);
+
+        // User task (not SYSTEM): relaunches the tray in the visible user session.
+        RunDetachedTask("HASSAgentNet10Relaunch", batch, asSystem: false);
+        _log.Info("Relaunch watchdog scheduled via Task Scheduler.");
+    }
+
     public async Task StopAsync(bool publishOffline = true)
     {
         if (_cts is null)
@@ -288,6 +571,7 @@ internal sealed class MqttCompanionService : IDisposable
                 if (_role == CompanionRuntimeRole.App)
                 {
                     await PublishUpdateStateAsync();
+                    await PublishPendingUpdateNotificationAsync();
                 }
 
                 // Store connection state so RestartAsync can decide whether a
@@ -430,6 +714,10 @@ internal sealed class MqttCompanionService : IDisposable
 
         // Publish discovery via WebSocket.
         await PublishDiscoveryViaWebSocketAsync(wsCts.Token);
+        if (_role == CompanionRuntimeRole.App)
+        {
+            await PublishPendingUpdateNotificationAsync();
+        }
 
         // Start the receive loop (handles incoming commands).
         var receiveTask = Task.Run(() => _haWs.ReceiveLoopAsync(wsCts.Token), wsCts.Token);
@@ -653,14 +941,16 @@ internal sealed class MqttCompanionService : IDisposable
 
         if (_role == CompanionRuntimeRole.Service)
         {
-            if (_settings.ServiceCommands.Count > 0)
-            {
-                builder.WithTopicFilter(ServiceCommandTopic, MqttQualityOfServiceLevel.AtMostOnce);
-                await _client.SubscribeAsync(builder.Build(), cancellationToken);
-            }
-
+            // Always subscribed: silent update installs arrive here even when
+            // the user disabled every service command.
+            builder.WithTopicFilter(ServiceCommandTopic, MqttQualityOfServiceLevel.AtMostOnce);
+            await _client.SubscribeAsync(builder.Build(), cancellationToken);
             return;
         }
+
+        // The HA update entity's Install button publishes here.
+        builder.WithTopicFilter(UpdateInstallTopic, MqttQualityOfServiceLevel.AtMostOnce);
+        hasSubscriptions = true;
 
         if (_settings.MqttNotificationsEnabled)
         {
@@ -693,6 +983,7 @@ internal sealed class MqttCompanionService : IDisposable
     {
         var topic = args.ApplicationMessage.Topic;
         var payload = ReadPayload(args.ApplicationMessage);
+        _log.Debug($"MQTT ← {topic} ({payload.Length} B)");
 
         try
         {
@@ -732,12 +1023,35 @@ internal sealed class MqttCompanionService : IDisposable
                 }
             }
 
+            if (topic == UpdateInstallTopic && _role == CompanionRuntimeRole.App)
+            {
+                if (string.Equals(payload.Trim().Trim('"'), "install", StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = Task.Run(HandleUpdateInstallRequestAsync);
+                }
+
+                return;
+            }
+
             if (topic == ServiceCommandTopic)
             {
                 var command = JsonSerializer.Deserialize<SystemCommandMessage>(payload, JsonOptions);
                 if (command is not null)
                 {
                     var commandName = GetSystemCommandName(command);
+
+                    // Internal command, not user-configurable: the tray app asks the
+                    // SYSTEM service to install an update without a UAC prompt.
+                    if (commandName == "install_update")
+                    {
+                        if (_role == CompanionRuntimeRole.Service)
+                        {
+                            _ = Task.Run(RunSilentUpdateInstallAsync);
+                        }
+
+                        return;
+                    }
+
                     if (commandName is null || !_settings.IsServiceCommandEnabled(commandName))
                     {
                         _log.Warning($"Unsupported system service command received: {commandName ?? "(empty)"}");
@@ -829,7 +1143,7 @@ internal sealed class MqttCompanionService : IDisposable
 
     private async Task PublishUpdateStateAsync()
     {
-        var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion);
+        var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion, _settings.BetaUpdatesEnabled);
         if (!string.IsNullOrWhiteSpace(update.Error))
         {
             _log.Warning($"Unable to publish update state: {update.Error}");
@@ -859,7 +1173,9 @@ internal sealed class MqttCompanionService : IDisposable
                 TitleTemplate: "{{ value_json.title }}",
                 ReleaseUrlTopic: UpdateStateTopic,
                 ReleaseUrlTemplate: "{{ value_json.release_url }}",
-                JsonAttributesTopic: UpdateStateTopic),
+                JsonAttributesTopic: UpdateStateTopic,
+                CommandTopic: UpdateInstallTopic,
+                PayloadInstall: "install"),
             retain: _settings.MqttRetainDiscovery);
     }
 
@@ -1003,14 +1319,16 @@ internal sealed class MqttCompanionService : IDisposable
             return;
         }
 
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
         var message = _factory.CreateApplicationMessageBuilder()
             .WithTopic(topic)
-            .WithPayload(JsonSerializer.Serialize(payload, JsonOptions))
+            .WithPayload(json)
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
             .WithRetainFlag(retain)
             .Build();
 
         await _client.PublishAsync(message);
+        _log.Debug($"MQTT → {topic} ({json.Length} B)");
     }
 
     private async Task PublishRawAsync(string topic, byte[]? payload, bool retain)
@@ -1053,6 +1371,10 @@ internal sealed class MqttCompanionService : IDisposable
     private string ServiceCommandTopic => $"hass.agent/system/{TopicId}/cmd";
 
     private string UpdateStateTopic => $"hass.agent/update/{TopicId}/state";
+
+    private string UpdateInstallTopic => $"hass.agent/update/{TopicId}/install";
+
+    private string PersistentNotificationTopic => $"hass.agent/persistent_notification/{TopicId}";
 }
 
 internal sealed record MqttDiscoveryMessage(
@@ -1087,7 +1409,13 @@ internal sealed record MqttUpdateDiscoveryConfig(
     [property: JsonPropertyName("title_template")] string TitleTemplate,
     [property: JsonPropertyName("release_url_topic")] string ReleaseUrlTopic,
     [property: JsonPropertyName("release_url_template")] string ReleaseUrlTemplate,
-    [property: JsonPropertyName("json_attributes_topic")] string JsonAttributesTopic);
+    [property: JsonPropertyName("json_attributes_topic")] string JsonAttributesTopic,
+    [property: JsonPropertyName("command_topic")] string CommandTopic,
+    [property: JsonPropertyName("payload_install")] string PayloadInstall);
+
+internal sealed record PersistentNotificationMessage(
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("message")] string Message);
 
 internal sealed record MqttDiscoveryDevice(
     [property: JsonPropertyName("identifiers")] IReadOnlyList<string> Identifiers,

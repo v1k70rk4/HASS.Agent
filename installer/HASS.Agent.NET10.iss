@@ -1,5 +1,5 @@
 ﻿#ifndef MyAppVersion
-#define MyAppVersion "10.2.0"
+#define MyAppVersion "10.3.0"
 #endif
 
 #define MyAppName "HASS.Agent .NET10"
@@ -90,6 +90,23 @@ begin
   Result := Exec(FileName, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+{ True when the setup was started by the HASS.Agent silent self-update.
+  In that case the installer runs as SYSTEM (session 0), so launching the
+  tray app here would make it invisible — a watchdog in the user session
+  restarts it instead. }
+function IsSilentUpdate(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/SILENTUPDATE') = 0 then
+    begin
+      Result := True;
+      exit;
+    end;
+end;
+
 function IsServiceInstalled(): Boolean;
 var
   ResultCode: Integer;
@@ -170,6 +187,7 @@ begin
       RunHidden(ExpandConstant('{app}\{#MyAppExeName}'), '--install-service --quiet');
     end;
 
-    Exec(ExpandConstant('{app}\{#MyAppExeName}'), '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+    if not IsSilentUpdate() then
+      Exec(ExpandConstant('{app}\{#MyAppExeName}'), '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
   end;
 end;

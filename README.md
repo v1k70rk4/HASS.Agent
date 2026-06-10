@@ -2,11 +2,11 @@
 
 ![Windows](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![Version](https://img.shields.io/badge/version-10.2.0-brightgreen)
+![Version](https://img.shields.io/badge/version-10.3.0-brightgreen)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT%20%7C%20WebSocket%20API-41BDF5?logo=homeassistant&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-<img src="images/hass_agent_companion_modern_icon.png" align="right" width="128" alt="HASS.Agent .NET10 icon">
+<img src="docs/images/hass_agent_companion_modern_icon.png" align="right" width="128" alt="HASS.Agent .NET10 icon">
 
 A modern Windows companion app for Home Assistant.
 
@@ -28,6 +28,7 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
   - [Media Player](#media-player)
   - [System Commands](#system-commands)
   - [Windows Service](#windows-service)
+  - [Danger Zone](#danger-zone)
 - [Sensors](#sensors)
   - [Built-in Sensors](#built-in-sensors)
   - [Sensor Attributes](#sensor-attributes)
@@ -35,6 +36,7 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
   - [Custom Sensors](#custom-sensors)
 - [Home Assistant Integration](#home-assistant-integration)
   - [Connection Modes](#connection-modes)
+  - [Updating from Home Assistant](#updating-from-home-assistant)
   - [MQTT Topics](#mqtt-topics)
   - [HA API WebSocket Events](#ha-api-websocket-events)
 - [Local HTTP API](#local-http-api)
@@ -46,6 +48,23 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
 ---
 
 ## What Changed
+
+### 10.3.0
+
+- Added one-click updates from Home Assistant: the update entity's **Install** button downloads and installs the new version on the PC — fully silent when the system service is installed, with a UAC prompt otherwise.
+- Added persistent notifications to Home Assistant for update progress: started, completed (with version), no installer, or failure.
+- Added the opt-in **Danger Zone** tab: maintenance and diagnostics tools behind a checkbox on the General page.
+- Added MQTT maintenance: list and delete retained HASS.Agent messages on the broker (per device or all devices).
+- Added one-click discovery republish on the active connection (MQTT or HA API).
+- Added a live debug log viewer with filtering and a runtime verbose (DEBUG) logging toggle.
+- Added a live MQTT monitor for the `hass.agent/#` topics with payload preview.
+- Added settings backup/restore to a portable JSON file (machine-bound secrets excluded).
+- Added factory reset with double confirmation and automatic app restart.
+- Added an MQTT connection test button on the MQTT page (matches the HA API page).
+- Added a beta update channel: opt in to receive GitHub pre-releases from the update checker.
+- Pre-release versions (`10.3.0-beta.1`) are now handled correctly by the version comparison and shown in the UI.
+- The General page warning now also shows when the system service is installed but stopped.
+- Fixed input fields overflowing on small window sizes across the General, MQTT, and HA API pages.
 
 ### 10.2.0
 
@@ -107,7 +126,7 @@ If you download a published self-contained build, you do **not** need to install
 8. Optionally install the Windows service from the **Service** page.
 9. The device appears automatically in Home Assistant.
 
-<p align="center"><img src="images/ui_general.png" width="700" alt="General settings page"></p>
+<p align="center"><img src="docs/images/ui-general.png" width="700" alt="General settings page"></p>
 
 ---
 
@@ -195,7 +214,27 @@ The same executable can run as a tray app or as a Windows service. Use the **Ser
 
 Use the **Capabilities** page to choose which role handles each feature.
 
-<p align="center"><img src="images/ui_capabilities.png" width="700" alt="Capabilities page"></p>
+<p align="center"><img src="docs/images/ui-services.png" width="700" alt="Service page"></p>
+
+<p align="center"><img src="docs/images/ui-capabilities.png" width="700" alt="Capabilities page"></p>
+
+### Danger Zone
+
+An opt-in maintenance and diagnostics toolbox. Enable it with the **Danger Zone** checkbox on the General page and a new tab appears with the following tools:
+
+| Tool | What it does |
+|------|--------------|
+| **MQTT maintenance** | Lists every retained HASS.Agent message on the broker (this device's or all devices') and deletes the selected ones — the cure for ghost entities after renames or reinstalls. |
+| **Republish discovery** | Re-sends the device discovery on the active connection (MQTT or HA API) without restarting the app. |
+| **Debug log** | Live log viewer with filtering, plus a verbose toggle that enables DEBUG-level logging (including every sent/received MQTT message) until the next restart. |
+| **Live MQTT monitor** | Watches the `hass.agent/#` topics in real time with a payload preview — see exactly what the agent sends and receives. |
+| **Backup / restore** | Exports the settings to a portable JSON file and restores them from one. DPAPI-protected secrets (MQTT password, HA API token) are machine-bound and excluded. |
+| **Factory reset** | Deletes all settings after a double confirmation and restarts the app with a fresh serial number and API key. |
+
+The Danger Zone also hosts the **beta updates** toggle: when enabled, update checks include GitHub pre-releases, so you can follow the beta channel. Stable users are never offered pre-releases.
+
+<p align="center"><img src="docs/images/ui-dangerzone-menu.png" width="700" alt="Danger Zone tools menu"></p>
+<p align="center"><img src="docs/images/ui-dangerzone-mqtt-maintenance.png" width="700" alt="Danger Zone MQTT maintenance"></p>
 
 ---
 
@@ -246,7 +285,7 @@ Built-in sensors are predefined system metrics. Each one can be enabled/disabled
 | Audio output device | normal | | yes |
 | Microphone muted | normal | | yes |
 
-<p align="center"><img src="images/ui_builtin_sensors.png" width="700" alt="Built-in sensors tab"></p>
+<p align="center"><img src="docs/images/ui-sensors-built-in.png" width="700" alt="Built-in sensors tab"></p>
 
 ### Sensor Attributes
 
@@ -283,7 +322,7 @@ Custom sensors are parameterized sensors you can add multiple times with differe
 - **Parameter** - what to monitor (depends on type)
 - **Profile** - polling interval (fast / normal / hourly / startup)
 
-<p align="center"><img src="images/ui_custom_sensors.png" width="700" alt="Custom sensors tab"></p>
+<p align="center"><img src="docs/images/ui-sensors-custom.png" width="900" alt="Custom sensors tab"></p>
 
 #### `process_running`
 
@@ -437,6 +476,20 @@ The agent supports three connection modes. You can use MQTT and HA API together 
 **HA API (WebSocket)** — The agent connects directly to Home Assistant's WebSocket API using a long-lived access token. Works remotely (e.g. via Nabu Casa) without an MQTT broker. Almost all features work, with some trade-offs: no retained state (sensor values are lost until the agent reconnects after a restart), no MQTT Last Will (no automatic offline detection), and media thumbnails are ~33% larger (base64 encoding). HTTPS is required for remote access.
 
 **Local HTTP API** — A minimal fallback. The agent runs a small HTTP server that Home Assistant connects to. Only notifications are supported. Requires manual setup (IP address, port, API key). Use MQTT or HA API instead for full functionality.
+
+<p align="center"><img src="docs/images/ui-mqtt.png" width="700" alt="MQTT settings page"></p>
+<p align="center"><img src="docs/images/ui-ha-api.png" width="700" alt="HA API settings page"></p>
+
+### Updating from Home Assistant
+
+When a new release is available, the agent publishes an **update entity** to Home Assistant with a working **Install** button. With the Windows service installed, the update is downloaded and applied **fully silently** (no UAC prompt); otherwise a UAC prompt appears on the PC. Home Assistant receives a **persistent notification** for the progress and result.
+
+<p align="center"><img src="docs/images/ha-update-alert.png" width="500" alt="Update available in Home Assistant"></p>
+<p align="center"><img src="docs/images/ha-client-updated.png" width="500" alt="Update completed notification"></p>
+
+You can also check for updates manually from the **About** page, which shows the installed version, the latest release, and a one-click update download.
+
+<p align="center"><img src="docs/images/ui-about.png" width="700" alt="About page"></p>
 
 ### MQTT Topics
 

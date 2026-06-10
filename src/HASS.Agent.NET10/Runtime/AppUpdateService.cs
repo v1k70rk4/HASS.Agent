@@ -5,15 +5,28 @@ namespace HASS.Agent.Companion.Runtime;
 
 internal static class AppUpdateService
 {
-    public static async Task<AppUpdateState> CheckAsync(string installedVersion, CancellationToken cancellationToken = default)
+    public static async Task<AppUpdateState> CheckAsync(string installedVersion, bool includePrereleases = false, CancellationToken cancellationToken = default)
     {
         try
         {
             using var http = new HttpClient();
             http.DefaultRequestHeaders.UserAgent.ParseAdd($"{AppIdentity.ExecutableName}/{installedVersion}");
 
-            var latestUrl = $"https://api.github.com/repos/{AppIdentity.GitHubRepository}/releases/latest";
-            var release = await http.GetFromJsonAsync<GitHubRelease>(latestUrl, cancellationToken);
+            // The releases/latest endpoint never returns pre-releases; the beta
+            // channel reads the release list instead (newest first, drafts skipped).
+            GitHubRelease? release;
+            if (includePrereleases)
+            {
+                var listUrl = $"https://api.github.com/repos/{AppIdentity.GitHubRepository}/releases?per_page=10";
+                var releases = await http.GetFromJsonAsync<List<GitHubRelease>>(listUrl, cancellationToken);
+                release = releases?.FirstOrDefault(item => !item.Draft && !string.IsNullOrWhiteSpace(item.TagName));
+            }
+            else
+            {
+                var latestUrl = $"https://api.github.com/repos/{AppIdentity.GitHubRepository}/releases/latest";
+                release = await http.GetFromJsonAsync<GitHubRelease>(latestUrl, cancellationToken);
+            }
+
             if (release is null || string.IsNullOrWhiteSpace(release.TagName))
             {
                 return AppUpdateState.Failed(installedVersion, "latest_release_unavailable");
@@ -80,26 +93,91 @@ internal static class AppUpdateService
 
     private static bool IsNewerVersion(string latestTag, string currentVersion)
     {
-        var latest = NormalizeVersion(latestTag);
-        var current = NormalizeVersion(currentVersion);
-        if (latest is not null && current is not null)
+        var (latestCore, latestPre) = SplitVersion(latestTag);
+        var (currentCore, currentPre) = SplitVersion(currentVersion);
+
+        if (latestCore is null || currentCore is null)
         {
-            return latest.CompareTo(current) > 0;
+            return !string.Equals(latestTag.Trim(), currentVersion.Trim(), StringComparison.OrdinalIgnoreCase);
         }
 
-        return !string.Equals(latestTag.Trim(), currentVersion.Trim(), StringComparison.OrdinalIgnoreCase);
+        var coreCompare = latestCore.CompareTo(currentCore);
+        if (coreCompare != 0)
+        {
+            return coreCompare > 0;
+        }
+
+        // Same core version: the stable release outranks any of its pre-releases
+        // (10.3.0 > 10.3.0-beta.2), and pre-releases compare SemVer style.
+        if (string.IsNullOrEmpty(latestPre))
+        {
+            return !string.IsNullOrEmpty(currentPre);
+        }
+
+        if (string.IsNullOrEmpty(currentPre))
+        {
+            return false;
+        }
+
+        return ComparePrerelease(latestPre, currentPre) > 0;
     }
 
-    private static Version? NormalizeVersion(string value)
+    private static (Version? Core, string Prerelease) SplitVersion(string value)
     {
         var normalized = value.Trim().TrimStart('v', 'V');
+        var prerelease = string.Empty;
         var suffixIndex = normalized.IndexOfAny(['-', '+']);
         if (suffixIndex >= 0)
         {
+            if (normalized[suffixIndex] == '-')
+            {
+                prerelease = normalized[(suffixIndex + 1)..];
+                var buildIndex = prerelease.IndexOf('+');
+                if (buildIndex >= 0)
+                {
+                    prerelease = prerelease[..buildIndex];
+                }
+            }
+
             normalized = normalized[..suffixIndex];
         }
 
-        return Version.TryParse(normalized, out var version) ? version : null;
+        return (Version.TryParse(normalized, out var version) ? version : null, prerelease);
+    }
+
+    private static int ComparePrerelease(string left, string right)
+    {
+        var leftParts = left.Split('.');
+        var rightParts = right.Split('.');
+        for (var index = 0; index < Math.Max(leftParts.Length, rightParts.Length); index++)
+        {
+            if (index >= leftParts.Length)
+            {
+                return -1;
+            }
+
+            if (index >= rightParts.Length)
+            {
+                return 1;
+            }
+
+            var leftIsNumber = long.TryParse(leftParts[index], out var leftNumber);
+            var rightIsNumber = long.TryParse(rightParts[index], out var rightNumber);
+            var compare = (leftIsNumber, rightIsNumber) switch
+            {
+                (true, true) => leftNumber.CompareTo(rightNumber),
+                (true, false) => -1,
+                (false, true) => 1,
+                _ => string.Compare(leftParts[index], rightParts[index], StringComparison.OrdinalIgnoreCase)
+            };
+
+            if (compare != 0)
+            {
+                return compare;
+            }
+        }
+
+        return 0;
     }
 
     private static string SanitizeFileName(string name)
@@ -111,6 +189,8 @@ internal static class AppUpdateService
     private sealed record GitHubRelease(
         [property: JsonPropertyName("tag_name")] string TagName,
         [property: JsonPropertyName("html_url")] string? HtmlUrl,
+        [property: JsonPropertyName("draft")] bool Draft,
+        [property: JsonPropertyName("prerelease")] bool Prerelease,
         [property: JsonPropertyName("assets")] IReadOnlyList<GitHubReleaseAsset>? Assets);
 
     private sealed record GitHubReleaseAsset(
