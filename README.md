@@ -217,8 +217,6 @@ The same executable can run as a tray app or as a Windows service. Use the **Ser
 
 Use the **Capabilities** page to choose which role handles each feature.
 
-<p align="center"><img src="docs/images/ui-services.png" width="700" alt="Service page"></p>
-
 <p align="center"><img src="docs/images/ui-capabilities.png" width="700" alt="Capabilities page"></p>
 
 ### Danger Zone
