@@ -12,6 +12,19 @@ internal sealed class FileLog : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
     }
 
+    public string FilePath => _path;
+
+    /// <summary>When enabled, Debug() lines are written too. Runtime-only, not persisted.</summary>
+    public bool VerboseEnabled { get; set; }
+
+    public void Debug(string message)
+    {
+        if (VerboseEnabled)
+        {
+            Write("DEBUG", message);
+        }
+    }
+
     public void Info(string message)
     {
         Write("INFO", message);

@@ -156,6 +156,19 @@ internal static class CompanionServiceManager
         return ServiceController.GetServices().Any(service => service.ServiceName == ServiceName);
     }
 
+    public static bool IsRunning()
+    {
+        try
+        {
+            using var controller = new ServiceController(ServiceName);
+            return controller.Status == ServiceControllerStatus.Running;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void TryStopExistingService()
     {
         try

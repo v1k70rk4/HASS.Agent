@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using HASS.Agent.Companion.Logging;
 
 namespace HASS.Agent.Companion.Configuration;
@@ -56,6 +57,23 @@ internal static class SettingsStore
     {
         settings.Normalize();
         Write(paths, Serialize(settings));
+    }
+
+    /// <summary>Writes a portable copy of the settings. DPAPI blobs are machine-bound, so they are left out.</summary>
+    public static void Export(CompanionSettings settings, string targetFile)
+    {
+        var node = JsonSerializer.SerializeToNode(settings, JsonOptions)!.AsObject();
+        node.Remove("mqttPasswordProtected");
+        node.Remove("haApiTokenProtected");
+        File.WriteAllText(targetFile, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    public static CompanionSettings Import(string sourceFile)
+    {
+        var settings = JsonSerializer.Deserialize<CompanionSettings>(File.ReadAllText(sourceFile), JsonOptions)
+            ?? throw new InvalidDataException("Not a valid settings file.");
+        settings.Normalize();
+        return settings;
     }
 
     private static void Write(AppPaths paths, string json)

@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.Text;
 using System.Windows.Forms;
 using HASS.Agent.Companion.Configuration;
 using HASS.Agent.Companion.Localization;
 using HASS.Agent.Companion.Logging;
+using HASS.Agent.Companion.Mqtt;
 using HASS.Agent.Companion.Networking;
 using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.SystemCommands;
@@ -51,6 +53,7 @@ internal sealed class MainForm : Form
     private Control? _generalDeviceCard;
     private Control? _generalNetworkCard;
     private Control? _generalFilesCard;
+    private Control? _generalDangerCard;
     private readonly Label _serviceWarning = new();
     private Control? _serviceStatusCard;
     private Control? _serviceActionsCard;
@@ -83,7 +86,24 @@ internal sealed class MainForm : Form
     private readonly DataGridView _builtInGrid = new();
     private readonly DataGridView _customGrid = new();
 
+    private readonly CheckBox _dangerZoneCheck = new();
+    private readonly ListView _dangerList = new();
+    private readonly Label _dangerStatus = new();
+    private readonly List<Button> _dangerButtons = [];
+    private readonly TextBox _debugLogBox = new();
+    private readonly TextBox _debugFilter = new();
+    private readonly System.Windows.Forms.Timer _debugTimer = new() { Interval = 1000 };
+    private string _debugRendered = string.Empty;
+    private readonly ListView _monitorList = new();
+    private readonly TextBox _monitorPayload = new();
+    private MqttLiveMonitor? _liveMonitor;
+
     public event EventHandler? SettingsSaved;
+
+    /// <summary>Wired by TrayApplicationContext to the MQTT service's discovery republish.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Func<Task<bool>>? DiscoveryRepublishHandler { get; set; }
 
     public MainForm(CompanionSettings settings, AppPaths paths, FileLog log, int initialPage = 0)
     {
@@ -118,9 +138,17 @@ internal sealed class MainForm : Form
         _content.Controls.Add(BuildSensorsPage());
         _content.Controls.Add(BuildServicePage());
         _content.Controls.Add(BuildAboutPage());
+        _content.Controls.Add(BuildDangerZonePage());
 
         LoadSettings();
         SelectPage(initialPage);
+
+        FormClosed += (_, _) =>
+        {
+            _debugTimer.Stop();
+            _ = _liveMonitor?.StopAsync();
+            _liveMonitor = null;
+        };
     }
 
     public void NavigateToPage(int index) => SelectPage(index);
@@ -176,9 +204,12 @@ internal sealed class MainForm : Form
         };
 
         var navContainer = new Panel { Dock = DockStyle.Fill, BackColor = SidebarBg };
-        string[] navKeys = ["Nav.General", "Nav.Mqtt", "Nav.HaApi", "Nav.Capabilities", "Nav.Sensors", "Nav.Service", "Nav.About"];
+        string[] navKeys = ["Nav.General", "Nav.Mqtt", "Nav.HaApi", "Nav.Capabilities", "Nav.Sensors", "Nav.Service", "Nav.About", "Nav.DangerZone"];
         for (var i = 0; i < navKeys.Length; i++)
             navContainer.Controls.Add(CreateNavItem(S(navKeys[i]), i));
+
+        // The Danger Zone tab is opt-in via the General page checkbox.
+        _nav[^1].Panel.Visible = _settings.DangerZoneEnabled;
 
         sidebar.Controls.Add(navContainer);
         sidebar.Controls.Add(version);
@@ -363,6 +394,12 @@ internal sealed class MainForm : Form
         openBtn.Location = Pt(20, 82);
         openBtn.Click += (_, _) => OpenFolder(_paths.ConfigDirectory);
         card3.Controls.Add(openBtn);
+
+        var card4 = MakeCard(page, 28, 758, 720, 64, null);
+        _generalDangerCard = card4;
+        AddCheck(card4, _dangerZoneCheck, S("Danger.Title"), 18);
+        _dangerZoneCheck.ForeColor = Color.FromArgb(185, 28, 28);
+        _dangerZoneCheck.CheckedChanged += (_, _) => _nav[^1].Panel.Visible = _dangerZoneCheck.Checked;
 
         UpdateGeneralStatusMessages();
         return page;
@@ -661,6 +698,11 @@ internal sealed class MainForm : Form
         if (_generalFilesCard is not null && _generalNetworkCard is not null)
         {
             _generalFilesCard.Top = _generalNetworkCard.Bottom + D(20);
+        }
+
+        if (_generalDangerCard is not null && _generalFilesCard is not null)
+        {
+            _generalDangerCard.Top = _generalFilesCard.Bottom + D(20);
         }
     }
 
@@ -1168,6 +1210,678 @@ internal sealed class MainForm : Form
 
     // ── Settings load / save ───────────────────────────────────────
 
+    private Panel BuildDangerZonePage()
+    {
+        var page = MakePage();
+
+        AddPageTitle(page, S("Danger.Title"));
+
+        var warning = new Label();
+        ConfigureStatusLabel(
+            warning,
+            "⚠  " + S("Danger.Warning"),
+            Color.FromArgb(153, 27, 27),
+            Color.White);
+        warning.Location = Pt(28, 56);
+        warning.Size = Sz(720, 48);
+        page.Controls.Add(warning);
+
+        // Tool picker view — one button per tool, each opening its own sub-view.
+        var toolsCard = MakeCard(page, 28, 116, 720, 344, S("Danger.Tools"));
+        var subCards = new List<Panel>();
+
+        void ShowView(Panel? sub)
+        {
+            toolsCard.Visible = sub is null;
+            foreach (var item in subCards)
+                item.Visible = ReferenceEquals(item, sub);
+        }
+
+        Panel AddToolCard(string titleKey, Action? onLeave)
+        {
+            var card = MakeCard(page, 28, 116, 720, 456, S(titleKey));
+            card.Visible = false;
+            subCards.Add(card);
+
+            var back = MakeSecondaryButton(S("Danger.Back"), 90, 30);
+            back.Location = Pt(20, 44);
+            back.Click += (_, _) =>
+            {
+                onLeave?.Invoke();
+                ShowView(null);
+            };
+            card.Controls.Add(back);
+            return card;
+        }
+
+        var hintLabels = new List<Label>();
+
+        Button AddToolRow(int row, string textKey, string hintKey)
+        {
+            var y = 44 + row * 42;
+            var btn = MakeSecondaryButton(S(textKey), 230, 32);
+            btn.Location = Pt(20, y);
+            toolsCard.Controls.Add(btn);
+            var hint = new Label
+            {
+                Text = S(hintKey), Location = Pt(262, y + 7),
+                Size = Sz(430, 20), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
+            };
+            toolsCard.Controls.Add(hint);
+            hintLabels.Add(hint);
+            return btn;
+        }
+
+        var mqttCard = BuildDangerMqttCard(AddToolCard);
+        var debugCard = BuildDangerDebugCard(AddToolCard);
+        var monitorCard = BuildDangerMonitorCard(AddToolCard);
+        var backupCard = BuildDangerBackupCard(AddToolCard);
+
+        AddToolRow(0, "Danger.MqttMaintenance", "Danger.MqttMaintenanceHint").Click += (_, _) => ShowView(mqttCard);
+        var republishBtn = AddToolRow(1, "Danger.Republish", "Danger.RepublishHint");
+        republishBtn.Click += (_, _) => _ = RepublishDiscoveryAsync(republishBtn);
+        AddToolRow(2, "Danger.DebugLog", "Danger.DebugLogHint").Click += (_, _) =>
+        {
+            ShowView(debugCard);
+            RefreshDebugLog();
+            _debugTimer.Start();
+        };
+        AddToolRow(3, "Danger.Monitor", "Danger.MonitorHint").Click += (_, _) => ShowView(monitorCard);
+        AddToolRow(4, "Danger.Backup", "Danger.BackupHint").Click += (_, _) => ShowView(backupCard);
+        var factoryBtn = AddToolRow(5, "Danger.FactoryReset", "Danger.FactoryResetHint");
+        factoryBtn.ForeColor = Color.FromArgb(185, 28, 28);
+        factoryBtn.Click += (_, _) => FactoryReset();
+
+        // Beta update channel — persists immediately, no Save button needed.
+        var betaCheck = new CheckBox
+        {
+            Text = S("Danger.BetaUpdates"), Location = Pt(20, 298),
+            Size = Sz(680, 26), ForeColor = TextBody, Checked = _settings.BetaUpdatesEnabled
+        };
+        betaCheck.CheckedChanged += (_, _) =>
+        {
+            if (_settings.BetaUpdatesEnabled == betaCheck.Checked)
+            {
+                return;
+            }
+
+            _settings.BetaUpdatesEnabled = betaCheck.Checked;
+            SettingsStore.Save(_paths, _settings);
+            _log.Info($"Beta update channel {(betaCheck.Checked ? "enabled" : "disabled")}.");
+        };
+        toolsCard.Controls.Add(betaCheck);
+
+        toolsCard.Layout += (_, _) =>
+        {
+            var hintWidth = Math.Max(D(200), toolsCard.ClientSize.Width - D(262) - D(20));
+            foreach (var hint in hintLabels)
+            {
+                hint.Width = hintWidth;
+            }
+
+            betaCheck.Width = Math.Max(D(420), toolsCard.ClientSize.Width - D(40));
+        };
+
+        page.Layout += (_, _) =>
+        {
+            warning.Size = new Size(toolsCard.Width, D(48));
+            warning.BringToFront();
+            foreach (var sub in subCards)
+                sub.Height = Math.Max(D(320), page.ClientSize.Height - sub.Top - D(12));
+        };
+
+        return page;
+    }
+
+    private Panel BuildDangerMqttCard(Func<string, Action?, Panel> addToolCard)
+    {
+        var mqttCard = addToolCard("Danger.RetainedCard", null);
+
+        var loadOwn = MakeSecondaryButton(S("Danger.LoadOwn"), 210, 30);
+        loadOwn.Location = Pt(118, 44);
+        loadOwn.Click += (_, _) => _ = LoadRetainedAsync(ownOnly: true);
+        mqttCard.Controls.Add(loadOwn);
+
+        var loadAll = MakeSecondaryButton(S("Danger.LoadAll"), 210, 30);
+        loadAll.Location = Pt(336, 44);
+        loadAll.Click += (_, _) => _ = LoadRetainedAsync(ownOnly: false);
+        mqttCard.Controls.Add(loadAll);
+
+        _dangerStatus.Location = Pt(20, 82);
+        _dangerStatus.Size = Sz(680, 20);
+        _dangerStatus.ForeColor = TextMuted;
+        mqttCard.Controls.Add(_dangerStatus);
+
+        _dangerList.View = View.Details;
+        _dangerList.CheckBoxes = true;
+        _dangerList.FullRowSelect = true;
+        _dangerList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+        _dangerList.Location = Pt(20, 108);
+        _dangerList.Size = Sz(680, 290);
+        _dangerList.Font = new Font("Consolas", 9F);
+        _dangerList.Columns.Add(S("Danger.ColTopic"), D(440));
+        _dangerList.Columns.Add(S("Danger.ColSize"), D(80));
+        _dangerList.Columns.Add(S("Danger.ColDevice"), D(130));
+        mqttCard.Controls.Add(_dangerList);
+
+        var selectAll = new CheckBox
+        {
+            Text = S("Danger.SelectAll"), Location = Pt(20, 410),
+            Size = Sz(220, 26), ForeColor = TextBody
+        };
+        selectAll.CheckedChanged += (_, _) =>
+        {
+            foreach (ListViewItem item in _dangerList.Items)
+                item.Checked = selectAll.Checked;
+        };
+        mqttCard.Controls.Add(selectAll);
+
+        var deleteBtn = MakePrimaryButton(S("Danger.DeleteSelected"), 190, 32);
+        deleteBtn.BackColor = Color.FromArgb(220, 38, 38);
+        deleteBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(185, 28, 28);
+        deleteBtn.Location = Pt(510, 406);
+        deleteBtn.Click += (_, _) => _ = DeleteRetainedSelectedAsync();
+        mqttCard.Controls.Add(deleteBtn);
+
+        mqttCard.Layout += (_, _) =>
+        {
+            var margin = D(20);
+            _dangerStatus.Width = mqttCard.ClientSize.Width - margin * 2;
+            _dangerList.Width = mqttCard.ClientSize.Width - margin * 2;
+            _dangerList.Height = Math.Max(D(120), mqttCard.ClientSize.Height - _dangerList.Top - D(58));
+            selectAll.Top = _dangerList.Bottom + D(14);
+            deleteBtn.Top = _dangerList.Bottom + D(10);
+            deleteBtn.Left = mqttCard.ClientSize.Width - deleteBtn.Width - margin;
+
+            var topicWidth = _dangerList.ClientSize.Width
+                - _dangerList.Columns[1].Width
+                - _dangerList.Columns[2].Width
+                - D(4);
+            if (topicWidth > D(100))
+            {
+                _dangerList.Columns[0].Width = topicWidth;
+            }
+        };
+
+        _dangerButtons.AddRange([loadOwn, loadAll, deleteBtn]);
+        return mqttCard;
+    }
+
+    private Panel BuildDangerDebugCard(Func<string, Action?, Panel> addToolCard)
+    {
+        var card = addToolCard("Danger.DebugLog", () => _debugTimer.Stop());
+
+        var verbose = new CheckBox
+        {
+            Text = S("Danger.DebugVerbose"), Location = Pt(118, 47),
+            Size = Sz(560, 26), ForeColor = TextBody, Checked = _log.VerboseEnabled
+        };
+        verbose.CheckedChanged += (_, _) => _log.VerboseEnabled = verbose.Checked;
+        card.Controls.Add(verbose);
+
+        _debugFilter.PlaceholderText = S("Danger.DebugFilter");
+        _debugFilter.Location = Pt(20, 82);
+        _debugFilter.Size = Sz(300, 28);
+        _debugFilter.TextChanged += (_, _) => RefreshDebugLog();
+        card.Controls.Add(_debugFilter);
+
+        _debugLogBox.ReadOnly = true;
+        _debugLogBox.Multiline = true;
+        _debugLogBox.ScrollBars = ScrollBars.Both;
+        _debugLogBox.WordWrap = false;
+        _debugLogBox.Font = new Font("Consolas", 8.5F);
+        _debugLogBox.BackColor = Color.FromArgb(15, 23, 42);
+        _debugLogBox.ForeColor = Color.FromArgb(226, 232, 240);
+        _debugLogBox.Location = Pt(20, 118);
+        _debugLogBox.Size = Sz(680, 300);
+        card.Controls.Add(_debugLogBox);
+
+        _debugTimer.Tick += (_, _) => RefreshDebugLog();
+
+        card.Layout += (_, _) =>
+        {
+            var margin = D(20);
+            _debugLogBox.Width = card.ClientSize.Width - margin * 2;
+            _debugLogBox.Height = Math.Max(D(120), card.ClientSize.Height - _debugLogBox.Top - D(16));
+        };
+
+        return card;
+    }
+
+    private void RefreshDebugLog()
+    {
+        try
+        {
+            using var stream = new FileStream(_paths.LogFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            const int maxBytes = 128 * 1024;
+            if (stream.Length > maxBytes)
+            {
+                stream.Seek(-maxBytes, SeekOrigin.End);
+            }
+
+            using var reader = new StreamReader(stream);
+            var text = reader.ReadToEnd();
+
+            var filter = _debugFilter.Text.Trim();
+            if (filter.Length > 0)
+            {
+                text = string.Join(
+                    Environment.NewLine,
+                    text.Split('\n')
+                        .Where(line => line.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                        .Select(line => line.TrimEnd('\r')));
+            }
+
+            if (text == _debugRendered)
+            {
+                return;
+            }
+
+            _debugRendered = text;
+            _debugLogBox.Text = text;
+            _debugLogBox.SelectionStart = _debugLogBox.TextLength;
+            _debugLogBox.ScrollToCaret();
+        }
+        catch
+        {
+            // The log file may be momentarily locked — retry on the next tick.
+        }
+    }
+
+    private Panel BuildDangerMonitorCard(Func<string, Action?, Panel> addToolCard)
+    {
+        Button? toggle = null;
+        var card = addToolCard("Danger.Monitor", () => _ = StopLiveMonitorAsync(toggle));
+
+        toggle = MakeSecondaryButton(S("Danger.MonitorStart"), 140, 30);
+        toggle.Location = Pt(118, 44);
+        var toggleButton = toggle;
+        toggle.Click += (_, _) => _ = ToggleLiveMonitorAsync(toggleButton);
+        card.Controls.Add(toggle);
+
+        _monitorList.View = View.Details;
+        _monitorList.FullRowSelect = true;
+        _monitorList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+        _monitorList.MultiSelect = false;
+        _monitorList.Location = Pt(20, 84);
+        _monitorList.Size = Sz(680, 220);
+        _monitorList.Font = new Font("Consolas", 9F);
+        _monitorList.Columns.Add(S("Danger.ColTime"), D(90));
+        _monitorList.Columns.Add(S("Danger.ColTopic"), D(440));
+        _monitorList.Columns.Add(S("Danger.ColSize"), D(80));
+        _monitorList.Columns.Add(S("Danger.ColRetain"), D(36));
+        _monitorList.SelectedIndexChanged += (_, _) =>
+        {
+            _monitorPayload.Text = _monitorList.SelectedItems.Count > 0
+                ? (string)(_monitorList.SelectedItems[0].Tag ?? string.Empty)
+                : string.Empty;
+        };
+        card.Controls.Add(_monitorList);
+
+        _monitorPayload.ReadOnly = true;
+        _monitorPayload.Multiline = true;
+        _monitorPayload.ScrollBars = ScrollBars.Vertical;
+        _monitorPayload.Font = new Font("Consolas", 8.5F);
+        _monitorPayload.BackColor = PageBg;
+        _monitorPayload.Location = Pt(20, 314);
+        _monitorPayload.Size = Sz(680, 110);
+        card.Controls.Add(_monitorPayload);
+
+        card.Layout += (_, _) =>
+        {
+            var margin = D(20);
+            var width = card.ClientSize.Width - margin * 2;
+            _monitorPayload.Width = width;
+            _monitorPayload.Top = card.ClientSize.Height - _monitorPayload.Height - D(16);
+            _monitorList.Width = width;
+            _monitorList.Height = Math.Max(D(100), _monitorPayload.Top - _monitorList.Top - D(10));
+
+            var topicWidth = _monitorList.ClientSize.Width
+                - _monitorList.Columns[0].Width
+                - _monitorList.Columns[2].Width
+                - _monitorList.Columns[3].Width
+                - D(4);
+            if (topicWidth > D(100))
+            {
+                _monitorList.Columns[1].Width = topicWidth;
+            }
+        };
+
+        return card;
+    }
+
+    private async Task ToggleLiveMonitorAsync(Button toggle)
+    {
+        if (_liveMonitor is not null)
+        {
+            await StopLiveMonitorAsync(toggle);
+            return;
+        }
+
+        if (!_settings.MqttEnabled || string.IsNullOrWhiteSpace(_settings.MqttHost))
+        {
+            MessageBox.Show(S("Danger.MqttRequired"), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var monitor = new MqttLiveMonitor();
+        toggle.Enabled = false;
+        try
+        {
+            await monitor.StartAsync(_settings, OnMonitorMessage, CancellationToken.None);
+            _liveMonitor = monitor;
+            toggle.Text = S("Danger.MonitorStop");
+        }
+        catch (Exception ex)
+        {
+            monitor.Dispose();
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            toggle.Enabled = true;
+        }
+    }
+
+    private async Task StopLiveMonitorAsync(Button? toggle)
+    {
+        var monitor = _liveMonitor;
+        _liveMonitor = null;
+        if (monitor is not null)
+        {
+            await monitor.StopAsync();
+        }
+
+        if (toggle is not null)
+        {
+            toggle.Text = S("Danger.MonitorStart");
+        }
+    }
+
+    private void OnMonitorMessage(string topic, string payload, bool retained)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(() =>
+            {
+                var item = new ListViewItem(DateTime.Now.ToString("HH:mm:ss")) { Tag = payload };
+                item.SubItems.Add(topic);
+                item.SubItems.Add($"{Encoding.UTF8.GetByteCount(payload)} B");
+                item.SubItems.Add(retained ? "R" : string.Empty);
+                _monitorList.Items.Add(item);
+                while (_monitorList.Items.Count > 500)
+                {
+                    _monitorList.Items.RemoveAt(0);
+                }
+
+                item.EnsureVisible();
+            });
+        }
+        catch
+        {
+            // The form may be closing.
+        }
+    }
+
+    private Panel BuildDangerBackupCard(Func<string, Action?, Panel> addToolCard)
+    {
+        var card = addToolCard("Danger.Backup", null);
+
+        card.Controls.Add(new Label
+        {
+            Text = S("Danger.BackupNote"), Location = Pt(20, 84),
+            Size = Sz(680, 36), ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F)
+        });
+
+        var exportBtn = MakeSecondaryButton(S("Danger.Export"), 210, 32);
+        exportBtn.Location = Pt(20, 128);
+        exportBtn.Click += (_, _) => ExportSettings();
+        card.Controls.Add(exportBtn);
+
+        var importBtn = MakeSecondaryButton(S("Danger.Import"), 210, 32);
+        importBtn.Location = Pt(238, 128);
+        importBtn.Click += (_, _) => ImportSettings();
+        card.Controls.Add(importBtn);
+
+        return card;
+    }
+
+    private void ExportSettings()
+    {
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "JSON (*.json)|*.json",
+            FileName = $"hassagent-settings-{DateTime.Now:yyyyMMdd}.json"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            SettingsStore.Export(_settings, dialog.FileName);
+            _log.Info($"Settings exported to {dialog.FileName}.");
+            MessageBox.Show(string.Format(S("Danger.ExportDone"), dialog.FileName), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ImportSettings()
+    {
+        using var dialog = new OpenFileDialog { Filter = "JSON (*.json)|*.json" };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            S("Danger.ImportConfirm"),
+            S("Danger.Title"),
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            var imported = SettingsStore.Import(dialog.FileName);
+            SettingsStore.Save(_paths, imported);
+            _log.Info("Settings imported from file; restarting.");
+            MessageBox.Show(S("Danger.ImportDone"), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            RestartApplication();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void FactoryReset()
+    {
+        var confirm1 = MessageBox.Show(
+            S("Danger.FactoryConfirm1"),
+            S("Danger.FactoryReset"),
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirm1 != DialogResult.Yes)
+        {
+            return;
+        }
+
+        var confirm2 = MessageBox.Show(
+            S("Danger.FactoryConfirm2"),
+            S("Danger.FactoryReset"),
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirm2 != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(_paths.SettingsFile);
+            _log.Info("Factory reset: settings file deleted; restarting.");
+            RestartApplication();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task RepublishDiscoveryAsync(Button button)
+    {
+        if (DiscoveryRepublishHandler is null)
+        {
+            return;
+        }
+
+        button.Enabled = false;
+        try
+        {
+            var published = await DiscoveryRepublishHandler();
+            MessageBox.Show(
+                published ? S("Danger.RepublishDone") : S("Danger.RepublishNotConnected"),
+                AppIdentity.DisplayName,
+                MessageBoxButtons.OK,
+                published ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            button.Enabled = true;
+        }
+    }
+
+    private static void RestartApplication()
+    {
+        // The single-instance mutex is still held while this process exits,
+        // so relaunch after a short delay from a detached shell.
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/c timeout /t 2 /nobreak >nul & start \"\" \"{Application.ExecutablePath}\"",
+            WindowStyle = ProcessWindowStyle.Hidden,
+            CreateNoWindow = true,
+            UseShellExecute = false
+        });
+        Application.Exit();
+    }
+
+    private async Task LoadRetainedAsync(bool ownOnly)
+    {
+        if (!_settings.MqttEnabled || string.IsNullOrWhiteSpace(_settings.MqttHost))
+        {
+            MessageBox.Show(S("Danger.MqttRequired"), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        SetDangerBusy(true);
+        _dangerStatus.Text = S("Danger.Loading");
+        _dangerList.Items.Clear();
+
+        try
+        {
+            var messages = await MqttRetainedBrowser.ScanAsync(_settings, CancellationToken.None);
+            if (ownOnly)
+            {
+                messages = messages.Where(m => m.IsOwnDevice).ToList();
+            }
+
+            foreach (var message in messages)
+            {
+                var item = new ListViewItem(message.Topic) { Tag = message.Topic };
+                item.SubItems.Add($"{message.PayloadSize} B");
+                item.SubItems.Add(message.IsOwnDevice ? S("Danger.ThisDevice") : S("Danger.OtherDevice"));
+                _dangerList.Items.Add(item);
+            }
+
+            _dangerStatus.Text = messages.Count == 0
+                ? S("Danger.NoMessages")
+                : string.Format(S("Danger.Found"), messages.Count);
+        }
+        catch (Exception ex)
+        {
+            _dangerStatus.Text = string.Empty;
+            _log.Warning($"Danger Zone scan failed: {ex.Message}");
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            SetDangerBusy(false);
+        }
+    }
+
+    private async Task DeleteRetainedSelectedAsync()
+    {
+        var topics = _dangerList.CheckedItems.Cast<ListViewItem>()
+            .Select(item => (string)item.Tag!)
+            .ToList();
+        if (topics.Count == 0)
+        {
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            string.Format(S("Danger.ConfirmDelete"), topics.Count),
+            S("Danger.Title"),
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        SetDangerBusy(true);
+        try
+        {
+            await MqttRetainedBrowser.DeleteAsync(_settings, topics, CancellationToken.None);
+            foreach (var item in _dangerList.CheckedItems.Cast<ListViewItem>().ToList())
+            {
+                _dangerList.Items.Remove(item);
+            }
+
+            _dangerStatus.Text = string.Format(S("Danger.Deleted"), topics.Count);
+            _log.Info($"Danger Zone: deleted {topics.Count} retained MQTT message(s).");
+        }
+        catch (Exception ex)
+        {
+            _log.Warning($"Danger Zone delete failed: {ex.Message}");
+            MessageBox.Show(string.Format(S("Danger.Error"), ex.Message), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            SetDangerBusy(false);
+        }
+    }
+
+    private void SetDangerBusy(bool busy)
+    {
+        foreach (var button in _dangerButtons)
+        {
+            button.Enabled = !busy;
+        }
+    }
+
     private void LoadSettings()
     {
         _deviceName.Text = _settings.DeviceName;
@@ -1175,6 +1889,7 @@ internal sealed class MainForm : Form
         _port.Value = _settings.Port;
         _autoStart.Checked = _settings.AutoStartOnLogin || StartupManager.IsEnabled();
         _showStartup.Checked = _settings.ShowStartupNotification;
+        _dangerZoneCheck.Checked = _settings.DangerZoneEnabled;
 
         var langIdx = Strings.AvailableLanguages.ToList().IndexOf(_settings.Language);
         _langCombo.SelectedIndex = langIdx >= 0 ? langIdx : 0;
@@ -1363,7 +2078,7 @@ internal sealed class MainForm : Form
 
         try
         {
-            var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion);
+            var update = await AppUpdateService.CheckAsync(_settings.SoftwareVersion, _settings.BetaUpdatesEnabled);
             if (!string.IsNullOrWhiteSpace(update.Error))
             {
                 MessageBox.Show(S("About.UpdateCheckFailed"), AppIdentity.DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1425,6 +2140,7 @@ internal sealed class MainForm : Form
         _settings.AutoStartOnLogin = _autoStart.Checked;
         StartupManager.SetEnabled(_settings.AutoStartOnLogin);
         _settings.ShowStartupNotification = _showStartup.Checked;
+        _settings.DangerZoneEnabled = _dangerZoneCheck.Checked;
 
         var selectedLang = Strings.AvailableLanguages[_langCombo.SelectedIndex >= 0 ? _langCombo.SelectedIndex : 0];
         var selectedHaLang = Strings.AvailableLanguages[_haLangCombo.SelectedIndex >= 0 ? _haLangCombo.SelectedIndex : 0];

@@ -221,6 +221,17 @@ internal sealed class HaWebSocketService : IDisposable
         }, cancellationToken);
     }
 
+    /// <summary>Asks the integration to create a Home Assistant persistent notification.</summary>
+    public async Task PublishPersistentNotificationAsync(string title, string message, CancellationToken cancellationToken)
+    {
+        await FireEventAsync("hass_agent_persistent_notification", new
+        {
+            serial_number = _settings.SerialNumber,
+            title,
+            message
+        }, cancellationToken);
+    }
+
     /// <summary>
     /// Tests the connection by connecting, reading the HA and integration versions, and disconnecting.
     /// Returns version details on success, or throws on connection/auth failure.

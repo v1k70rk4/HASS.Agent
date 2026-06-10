@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json.Serialization;
 using HASS.Agent.Companion.Runtime;
 using HASS.Agent.Companion.Security;
@@ -20,6 +21,13 @@ internal sealed class CompanionSettings
     public string ApiKey { get; set; } = string.Empty;
 
     public bool ShowStartupNotification { get; set; }
+
+    public bool DangerZoneEnabled { get; set; }
+
+    public bool BetaUpdatesEnabled { get; set; }
+
+    /// <summary>Version of the previous run — used to detect a completed update on startup.</summary>
+    public string LastRunVersion { get; set; } = string.Empty;
 
     public bool AutoStartOnLogin { get; set; }
 
@@ -43,7 +51,24 @@ internal sealed class CompanionSettings
 
     public string Model { get; set; } = AppIdentity.DisplayName;
 
-    public string SoftwareVersion { get; set; } = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.2.0";
+    public string SoftwareVersion { get; set; } = GetSoftwareVersion();
+
+    /// <summary>
+    /// Prefers the informational version so pre-release suffixes (10.3.0-beta.1)
+    /// survive — the assembly version would truncate them to 10.3.0.
+    /// </summary>
+    private static string GetSoftwareVersion()
+    {
+        var assembly = typeof(CompanionSettings).Assembly;
+        var info = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(info))
+        {
+            var buildIndex = info.IndexOf('+');
+            return buildIndex >= 0 ? info[..buildIndex] : info;
+        }
+
+        return assembly.GetName().Version?.ToString(3) ?? "10.3.0";
+    }
 
     public bool MqttEnabled { get; set; }
 
@@ -179,7 +204,7 @@ internal sealed class CompanionSettings
         }
         Manufacturer = NormalizeText(Manufacturer, "v1k70rk4");
         Model = NormalizeText(Model, AppIdentity.DisplayName);
-        SoftwareVersion = typeof(CompanionSettings).Assembly.GetName().Version?.ToString(3) ?? "10.2.0";
+        SoftwareVersion = GetSoftwareVersion();
         MqttHost = NormalizeText(MqttHost, "homeassistant.local");
         MqttUsername = MqttUsername.Trim();
         HaApiUrl = NormalizeUrl(HaApiUrl);

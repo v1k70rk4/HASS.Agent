@@ -2,7 +2,7 @@
 
 ![Windows](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![Version](https://img.shields.io/badge/version-10.2.0-brightgreen)
+![Version](https://img.shields.io/badge/version-10.3.0--beta.1-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT%20%7C%20WebSocket%20API-41BDF5?logo=homeassistant&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -28,6 +28,7 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
   - [Media Player](#media-player)
   - [System Commands](#system-commands)
   - [Windows Service](#windows-service)
+  - [Danger Zone](#danger-zone)
 - [Sensors](#sensors)
   - [Built-in Sensors](#built-in-sensors)
   - [Sensor Attributes](#sensor-attributes)
@@ -46,6 +47,20 @@ The modern .NET10 line starts at **version 10.0.0**. The pre-.NET10 client remai
 ---
 
 ## What Changed
+
+### 10.3.0
+
+- Added one-click updates from Home Assistant: the update entity's **Install** button downloads and installs the new version on the PC — fully silent when the system service is installed, with a UAC prompt otherwise.
+- Added persistent notifications to Home Assistant for update progress: started, completed (with version), no installer, or failure.
+- Added the opt-in **Danger Zone** tab: maintenance and diagnostics tools behind a checkbox on the General page.
+- Added MQTT maintenance: list and delete retained HASS.Agent messages on the broker (per device or all devices).
+- Added one-click discovery republish on the active connection (MQTT or HA API).
+- Added a live debug log viewer with filtering and a runtime verbose (DEBUG) logging toggle.
+- Added a live MQTT monitor for the `hass.agent/#` topics with payload preview.
+- Added settings backup/restore to a portable JSON file (machine-bound secrets excluded).
+- Added factory reset with double confirmation and automatic app restart.
+- Added a beta update channel: opt in to receive GitHub pre-releases from the update checker.
+- Pre-release versions (`10.3.0-beta.1`) are now handled correctly by the version comparison and shown in the UI.
 
 ### 10.2.0
 
@@ -196,6 +211,21 @@ The same executable can run as a tray app or as a Windows service. Use the **Ser
 Use the **Capabilities** page to choose which role handles each feature.
 
 <p align="center"><img src="images/ui_capabilities.png" width="700" alt="Capabilities page"></p>
+
+### Danger Zone
+
+An opt-in maintenance and diagnostics toolbox. Enable it with the **Danger Zone** checkbox on the General page and a new tab appears with the following tools:
+
+| Tool | What it does |
+|------|--------------|
+| **MQTT maintenance** | Lists every retained HASS.Agent message on the broker (this device's or all devices') and deletes the selected ones — the cure for ghost entities after renames or reinstalls. |
+| **Republish discovery** | Re-sends the device discovery on the active connection (MQTT or HA API) without restarting the app. |
+| **Debug log** | Live log viewer with filtering, plus a verbose toggle that enables DEBUG-level logging (including every sent/received MQTT message) until the next restart. |
+| **Live MQTT monitor** | Watches the `hass.agent/#` topics in real time with a payload preview — see exactly what the agent sends and receives. |
+| **Backup / restore** | Exports the settings to a portable JSON file and restores them from one. DPAPI-protected secrets (MQTT password, HA API token) are machine-bound and excluded. |
+| **Factory reset** | Deletes all settings after a double confirmation and restarts the app with a fresh serial number and API key. |
+
+The Danger Zone also hosts the **beta updates** toggle: when enabled, update checks include GitHub pre-releases, so you can follow the beta channel. Stable users are never offered pre-releases.
 
 ---
 

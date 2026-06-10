@@ -66,11 +66,16 @@ internal static class Program
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirstInstance);
         if (!isFirstInstance)
         {
-            MessageBox.Show(
-                $"{AppIdentity.DisplayName} is already running.",
-                AppIdentity.DisplayName,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            // --quiet: relaunch watchdogs may race an already-restarted instance.
+            if (!args.Any(arg => string.Equals(arg, "--quiet", StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show(
+                    $"{AppIdentity.DisplayName} is already running.",
+                    AppIdentity.DisplayName,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+
             return;
         }
 
@@ -145,6 +150,7 @@ internal static class Program
             log.Info("Settings saved from UI.");
             _ = Task.Run(() => mqttService.RestartAsync());
         };
+        trayContext.DiscoveryRepublishHandler = mqttService.RepublishDiscoveryAsync;
 
         try
         {
@@ -155,6 +161,19 @@ internal static class Program
         {
             log.Error(ex, "Unable to start Local API.");
             trayContext.ShowStartupError(ex);
+        }
+
+        // Detect a completed update: the previous run was a different version.
+        if (settings.LastRunVersion != settings.SoftwareVersion)
+        {
+            if (!string.IsNullOrEmpty(settings.LastRunVersion))
+            {
+                log.Info($"Updated from {settings.LastRunVersion} to {settings.SoftwareVersion}.");
+                mqttService.NotifyUpdateCompleted(settings.LastRunVersion);
+            }
+
+            settings.LastRunVersion = settings.SoftwareVersion;
+            SettingsStore.Save(paths, settings);
         }
 
         mqttService.Start();
