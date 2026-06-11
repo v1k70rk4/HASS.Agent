@@ -1,0 +1,11 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/reference/configuration
+# Docstring coverage is disabled: this is a WinForms-heavy codebase where most
+# methods are UI builders/layout helpers; doc comments are kept where the code
+# genuinely needs explanation (security, failover, update flows).
+reviews:
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  finishing_touches:
+    docstrings:
+      enabled: false
